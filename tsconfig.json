@@ -8,6 +8,8 @@
     "baseUrl": ".",
     "target": "es6",
     "moduleResolution": "node",
+    "esModuleInterop": true,
+    "experimentalDecorators": true,
     "paths": {
       "@/*": ["./src/*"]
     }

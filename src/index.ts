@@ -1,3 +1,9 @@
-import { sayHello } from "@/hello";
+import IGBot from "./igBot";
 
-sayHello();
+async function main() {
+  const bot = new IGBot("xd.freddie", "Shari2612");
+  await bot.init();
+  await bot.login();
+}
+
+main();
