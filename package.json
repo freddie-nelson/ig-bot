@@ -4,7 +4,7 @@
   "description": "A way to interact with Instagram Desktop from JS/TS without using the Instagram Graph API.",
   "scripts": {
     "start": "node dist/index.js",
-    "dev": "nodemon src/index.ts",
+    "dev": "node -r tsconfig-paths/register -r ts-node/register src/index.ts",
     "clean": "rimraf coverage dist tmp",
     "prebuild": "npm run lint",
     "build": "npm run clean && webpack",
@@ -19,11 +19,6 @@
   },
   "dependencies": {
     "colors": "^1.4.0",
-    "ghost-cursor": "^1.1.13",
-    "puppeteer": "^16.1.0",
-    "puppeteer-extra": "^3.3.4",
-    "puppeteer-extra-plugin-adblocker": "^2.13.4",
-    "puppeteer-extra-plugin-stealth": "^2.11.0",
     "secret-agent": "^1.6.5",
     "tslib": "~2.4"
   },

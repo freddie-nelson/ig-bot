@@ -1,7 +1,5 @@
-import { ElementHandle, Page } from "puppeteer";
-import { createCursor, GhostCursor } from "ghost-cursor";
-import { Scraper } from "./scraper";
-import GhostKeyboard from "./ghostKeyboard";
+import { Agent, LocationStatus, XPathResult } from "secret-agent";
+import { useXPathLowerCase } from "./utils/useXPathLowerCase";
 
 export function createFlagDecorator(propertyGetter: string, errorMsg: string) {
   return () => {
@@ -31,9 +29,32 @@ const needsLogin = createFlagDecorator(
   "The client must be logged in before using '$key'.",
 );
 
-export default class IGBot extends Scraper {
+const gracefulAgentClose = () => {
+  return (target: any, key: string, descriptor: PropertyDescriptor) => {
+    const originalFunc = descriptor.value;
+
+    descriptor.value = async function (...args: any[]) {
+      if (!this.agent || !(this.agent instanceof Agent))
+        throw new Error("Hero instance does not exist on target.");
+
+      try {
+        return originalFunc.apply(this, args);
+      } catch (error) {
+        await this.agent.close();
+        console.log("Closed hero instance.");
+        throw error;
+      }
+    };
+  };
+};
+
+export default class IGBot {
   private baseInstagramUrl = new URL("https://instagram.com");
   private loginUrl = this.getUrl("/accounts/login");
+  private onetapLoginUrl = this.getUrl("/accounts/onetap");
+
+  private agent: Agent;
+  private document: Agent["document"];
 
   // client state flags
   private isInitialised = false;
@@ -46,21 +67,17 @@ export default class IGBot extends Scraper {
     return this.isLoggedIn;
   }
 
-  private page: Page;
-  private cursor: GhostCursor;
-  private keyboard: GhostKeyboard;
-
-  constructor(private username: string, private password: string) {
-    super();
-  }
+  constructor(private username: string, private password: string) {}
 
   /**
    * Initializes the instagram client.
    */
   async init() {
-    this.page = await this.newPage(this.getHref("/"));
-    this.cursor = createCursor(this.page);
-    this.keyboard = new GhostKeyboard(this.page);
+    process.env.SA_SHOW_BROWSER = "true";
+    this.agent = new Agent({ showReplay: false });
+    this.document = this.agent.document;
+
+    await this.goto(this.baseInstagramUrl.href);
 
     await this.acceptCookieConsent();
 
@@ -68,37 +85,280 @@ export default class IGBot extends Scraper {
   }
 
   @needsInit()
-  async login() {
-    await this.acceptCookieConsent();
-    await this.page.goto(this.loginUrl.href);
-
-    const usernameInputSelector = "input[name='username']";
-    const passwordInputSelector = "input[name='password']";
-    const submitButtonSelector = "button[type='submit']";
-
-    await this.page.waitForSelector(usernameInputSelector);
-    await this.page.waitForSelector(passwordInputSelector);
-    await this.page.waitForSelector(submitButtonSelector);
-
-    await this.cursor.click(usernameInputSelector);
-    await this.keyboard.type(this.username);
-
-    await this.cursor.click(passwordInputSelector);
-    await this.keyboard.type(this.password);
-
-    await this.cursor.click(submitButtonSelector);
-    await this.page.waitForNavigation();
+  async close() {
+    await this.agent.close();
   }
 
-  async acceptCookieConsent() {
-    const consentModalSelector = "div[role='dialog']";
-    if (await this.page.$(consentModalSelector)) {
-      const acceptBtn = <ElementHandle<Element>>(
-        await this.findElementWithText(this.page, "button", "Only Allow Essential Cookies")
-      );
+  @gracefulAgentClose()
+  @needsInit()
+  async login() {
+    await this.acceptCookieConsent();
 
-      if (acceptBtn) await this.cursor.click(acceptBtn);
+    await this.goto(this.loginUrl.href);
+
+    const usernameInputSelector = "input[name='username']";
+    const usernameInput = await this.querySelector(usernameInputSelector);
+
+    const passwordInputSelector = "input[name='password']";
+    const passwordInput = await this.querySelector(passwordInputSelector);
+
+    const submitButtonSelector = "button[type='submit']";
+    const submitButton = await this.querySelector(submitButtonSelector);
+
+    console.log(`Entering username, '${this.username}'.`);
+    await this.agent.click(usernameInput);
+    await this.agent.type(this.username);
+
+    console.log(`Entering password, '${this.password}'.`);
+    await this.agent.click(passwordInput);
+    await this.agent.type(this.password);
+
+    console.log("Submitting login details.");
+    await this.agent.click(submitButton);
+
+    // wait for response
+    const loadingSpinnerSelector = `${submitButtonSelector} [data-visualcompletion='loading-state']`;
+    const loadingSpinner = await this.querySelector(loadingSpinnerSelector);
+    await this.agent.waitForElement(loadingSpinner);
+    await this.waitForNoElement(loadingSpinnerSelector);
+    await this.agent.waitForMillis(500);
+
+    console.log("Checking for login errors.");
+    const errorMsg = await this.querySelector("[role='alert']");
+    if (errorMsg) {
+      console.log("Failed to login, you may want to check your username and password.");
+      console.log(`Instagram Error: ${await errorMsg.textContent}`);
+      throw new Error("Failed to login.");
     }
+
+    console.log("Waiting for post login redirect.");
+    await this.waitForNavigationConditional(this.loginUrl.pathname);
+
+    this.isLoggedIn = true;
+    console.log("Logged in.");
+
+    console.log("Setting up for scraping after login.");
+    await this.declineOnetapLogin();
+    await this.declineNotifications();
+  }
+
+  @needsInit()
+  @needsLogin()
+  async declineOnetapLogin() {
+    await this.goto(this.onetapLoginUrl.href);
+
+    const declineButton = await this.findElementWithText("button", "not now");
+
+    console.log("Declining onetap login.");
+    await this.agent.click(declineButton);
+
+    console.log("Waiting for redirect to instagram homepage.");
+    await this.waitForNavigation();
+  }
+
+  @needsInit()
+  @needsLogin()
+  async declineNotifications() {
+    await this.goto(this.baseInstagramUrl.href);
+    await this.agent.waitForMillis(1000);
+
+    console.log("Checking for notifications consent modal.");
+    const notificationsModalSelector = "div[role='dialog']";
+    const notificationsModal = this.waitForElement(notificationsModalSelector, 5000).catch(
+      () => null,
+    );
+
+    if (!notificationsModal) {
+      console.log("No notifications consent modal found.");
+      return;
+    }
+
+    const declineButton = await this.waitForElementWithText("button", "not now", 3000);
+    if (!declineButton) {
+      console.log("No notifications decline button found.");
+      return;
+    }
+
+    await this.agent.click(declineButton);
+    await this.waitForNoElement(notificationsModalSelector);
+    console.log("Declined notifications.");
+  }
+
+  @gracefulAgentClose()
+  async acceptCookieConsent() {
+    await this.agent.waitForPaintingStable();
+
+    console.log("Checking for cookie consent modal.");
+    const consentModalSelector = "div[role='dialog']";
+    const consentModal = await this.waitForElement(consentModalSelector, 2000).catch(() => null);
+
+    if (!consentModal) {
+      console.log("No cookie consent modal found.");
+      return;
+    }
+
+    console.log("Modal found, attempting to accept cookies.");
+
+    const acceptBtn = await this.findElementWithText("button", "Only Allow Essential Cookies");
+    if (!acceptBtn) {
+      console.log("No cookie accept button found.");
+      return;
+    }
+
+    await this.agent.click(acceptBtn);
+    await this.waitForNoElement(consentModalSelector);
+    console.log("Accepted cookies.");
+  }
+
+  protected async waitForElementWithText(
+    tag: string,
+    text: string,
+    timeout = 10000,
+    exactMatch = true,
+    caseSensitive = false,
+    checksIntervalMs = 50,
+  ) {
+    console.log(`Waiting for '${tag}' element to exist with textContent '${text}'.`);
+
+    return new Promise<ReturnType<typeof this.document.querySelector>>((resolve, reject) => {
+      const id = setTimeout(() => {
+        console.log(
+          `Timeout of ${timeout}ms ran out and '${tag}' element with textContent '${text}' could not be found.`,
+        );
+        reject();
+      }, timeout);
+
+      (async () => {
+        let element: ReturnType<typeof this.document.querySelector>;
+        while (!(element = await this.findElementWithText(tag, text, exactMatch, caseSensitive))) {
+          await this.agent.waitForMillis(checksIntervalMs);
+        }
+
+        clearTimeout(id);
+        resolve(element);
+      })();
+    });
+  }
+
+  protected async findElementWithText(
+    tag: string,
+    text: string,
+    exactMatch = true,
+    caseSensitive = false,
+  ) {
+    console.log(
+      `Finding '${tag}' element with textContent ${exactMatch ? "of" : "containing"} '${text}'.`,
+    );
+    const elements = await this.document.querySelectorAll(tag);
+
+    if (!caseSensitive) text = text.toLowerCase();
+
+    for (const el of elements) {
+      let elText = await el.textContent;
+      if (!caseSensitive) elText = elText.toLowerCase();
+
+      if (exactMatch && elText === text) return el;
+      else if (elText.includes(text)) return el;
+    }
+
+    return null;
+  }
+
+  protected async waitForNoElement(selector: string, timeout = 10000, checksIntervalMs = 50) {
+    console.log(`Waiting for no element to exist with selector '${selector}'.`);
+
+    return new Promise<void>((resolve, reject) => {
+      const id = setTimeout(() => {
+        console.log(
+          `Timeout of ${timeout}ms ran out and element with selector '${selector}' still existed.`,
+        );
+        reject();
+      }, timeout);
+
+      (async () => {
+        while (await this.document.querySelector(selector)) {
+          await this.agent.waitForMillis(checksIntervalMs);
+        }
+
+        clearTimeout(id);
+        resolve();
+      })();
+    });
+  }
+
+  protected async waitForElement(selector: string, timeout = 10000, checksIntervalMs = 50) {
+    console.log(`Waiting for element with selector '${selector}' to exist.`);
+
+    return new Promise<ReturnType<typeof this.document.querySelector>>((resolve, reject) => {
+      const id = setTimeout(() => {
+        console.log(
+          `Timeout of ${timeout}ms ran out and no element with selector '${selector}' could be found.`,
+        );
+        reject();
+      }, timeout);
+
+      (async () => {
+        while (!(await this.document.querySelector(selector))) {
+          await this.agent.waitForMillis(checksIntervalMs);
+        }
+
+        clearTimeout(id);
+        resolve(await this.document.querySelector(selector));
+      })();
+    });
+  }
+
+  protected async querySelector(selector: string) {
+    console.log(`Selecting element '${selector}'.`);
+
+    const element = await this.document.querySelector(selector);
+    if (!element) {
+      console.log(`Could not find any element with selector '${selector}'.`);
+      return null;
+    }
+
+    return element;
+  }
+
+  protected async goto(url: string, waitForStatus?: LocationStatus) {
+    console.log(`Navigating to '${url}'.`);
+    await this.agent.goto(url);
+    console.log("Navigated, waiting for page to load.");
+    await this.waitForLoad(waitForStatus);
+    console.log(`Opened '${url}'.`);
+  }
+
+  /**
+   * .
+   *
+   * @param match The string to match for in the url
+   * @param trigger The waitForLocation trigger
+   * @param status The waitForLoad status to wait for from the page
+   */
+  protected async waitForNavigationConditional(
+    match: string,
+    trigger: "change" | "reload" = "change",
+    status?: LocationStatus,
+  ) {
+    if ((await this.agent.url).includes(match)) await this.waitForNavigation(trigger, status);
+  }
+
+  /**
+   * Calls agent's waitForLocation and then waitForLoad.
+   *
+   * @param trigger The waitForLocation trigger
+   * @param status The waitForLoad status to wait for from the page
+   */
+  protected async waitForNavigation(
+    trigger: "change" | "reload" = "change",
+    status?: LocationStatus,
+  ) {
+    await this.agent.waitForLocation(trigger);
+    await this.waitForLoad(status);
+  }
+
+  protected async waitForLoad(status = LocationStatus.AllContentLoaded) {
+    await this.agent.mainFrameEnvironment.waitForLoad(status);
   }
 
   private getUrl(path: string) {
