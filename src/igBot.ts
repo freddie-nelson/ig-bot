@@ -29,6 +29,25 @@ const needsLogin = createFlagDecorator(
   "The client must be logged in before using '$key'.",
 );
 
+const needsFree = createFlagDecorator(
+  "getIsFree",
+  "The client must be free in order to use '$key'.",
+);
+
+const makesBusy = () => {
+  return (target: any, key: string, descriptor: PropertyDescriptor) => {
+    const originalFunc = descriptor.value;
+
+    descriptor.value = async function (...args: any[]) {
+      this.isBusy = true;
+      const returnVal = await originalFunc.apply(this, args);
+      this.isBusy = false;
+
+      return returnVal;
+    };
+  };
+};
+
 const gracefulAgentClose = () => {
   return (target: any, key: string, descriptor: PropertyDescriptor) => {
     const originalFunc = descriptor.value;
@@ -67,21 +86,29 @@ export default class IGBot {
     return this.isLoggedIn;
   }
 
+  private isBusy = false;
+  getIsBusy() {
+    return this.isBusy;
+  }
+  getIsFree() {
+    return !this.isBusy;
+  }
+
   constructor(private username: string, private password: string) {}
 
   /**
    * Initializes the instagram client.
    */
+  @needsFree()
+  @makesBusy()
   async init() {
     process.env.SA_SHOW_BROWSER = "true";
     this.agent = new Agent({ showReplay: false });
     this.document = this.agent.document;
+    this.isInitialised = true;
 
     await this.goto(this.baseInstagramUrl.href);
-
     await this.acceptCookieConsent();
-
-    this.isInitialised = true;
   }
 
   @needsInit()
@@ -89,12 +116,20 @@ export default class IGBot {
     await this.agent.close();
   }
 
-  @gracefulAgentClose()
+  @needsFree()
   @needsInit()
-  async login() {
-    await this.acceptCookieConsent();
+  @needsLogin()
+  @makesBusy()
+  async post() {
+    await this.goto(this.baseInstagramUrl.href);
+  }
 
+  @needsFree()
+  @needsInit()
+  @makesBusy()
+  async login() {
     await this.goto(this.loginUrl.href);
+    await this.acceptCookieConsent();
 
     const usernameInputSelector = "input[name='username']";
     const usernameInput = await this.querySelector(usernameInputSelector);
@@ -138,12 +173,18 @@ export default class IGBot {
     console.log("Logged in.");
 
     console.log("Setting up for scraping after login.");
+
+    // escape isBusy flag
+    this.isBusy = false;
     await this.declineOnetapLogin();
     await this.declineNotifications();
+    this.isBusy = true;
   }
 
+  @needsFree()
   @needsInit()
   @needsLogin()
+  @makesBusy()
   async declineOnetapLogin() {
     await this.goto(this.onetapLoginUrl.href);
 
@@ -156,8 +197,10 @@ export default class IGBot {
     await this.waitForNavigation();
   }
 
+  @needsFree()
   @needsInit()
   @needsLogin()
+  @makesBusy()
   async declineNotifications() {
     await this.goto(this.baseInstagramUrl.href);
     await this.agent.waitForMillis(1000);
@@ -184,7 +227,7 @@ export default class IGBot {
     console.log("Declined notifications.");
   }
 
-  @gracefulAgentClose()
+  @needsInit()
   async acceptCookieConsent() {
     await this.agent.waitForPaintingStable();
 
@@ -210,6 +253,7 @@ export default class IGBot {
     console.log("Accepted cookies.");
   }
 
+  @needsInit()
   protected async waitForElementWithText(
     tag: string,
     text: string,
@@ -240,6 +284,7 @@ export default class IGBot {
     });
   }
 
+  @needsInit()
   protected async findElementWithText(
     tag: string,
     text: string,
@@ -264,6 +309,7 @@ export default class IGBot {
     return null;
   }
 
+  @needsInit()
   protected async waitForNoElement(selector: string, timeout = 10000, checksIntervalMs = 50) {
     console.log(`Waiting for no element to exist with selector '${selector}'.`);
 
@@ -286,6 +332,7 @@ export default class IGBot {
     });
   }
 
+  @needsInit()
   protected async waitForElement(selector: string, timeout = 10000, checksIntervalMs = 50) {
     console.log(`Waiting for element with selector '${selector}' to exist.`);
 
@@ -308,6 +355,7 @@ export default class IGBot {
     });
   }
 
+  @needsInit()
   protected async querySelector(selector: string) {
     console.log(`Selecting element '${selector}'.`);
 
@@ -320,6 +368,7 @@ export default class IGBot {
     return element;
   }
 
+  @needsInit()
   protected async goto(url: string, waitForStatus?: LocationStatus) {
     console.log(`Navigating to '${url}'.`);
     await this.agent.goto(url);
@@ -329,12 +378,13 @@ export default class IGBot {
   }
 
   /**
-   * .
+   * Calls waitForNavigation if `agent.url` includes `match`.
    *
    * @param match The string to match for in the url
    * @param trigger The waitForLocation trigger
    * @param status The waitForLoad status to wait for from the page
    */
+  @needsInit()
   protected async waitForNavigationConditional(
     match: string,
     trigger: "change" | "reload" = "change",
@@ -349,6 +399,7 @@ export default class IGBot {
    * @param trigger The waitForLocation trigger
    * @param status The waitForLoad status to wait for from the page
    */
+  @needsInit()
   protected async waitForNavigation(
     trigger: "change" | "reload" = "change",
     status?: LocationStatus,
@@ -357,6 +408,7 @@ export default class IGBot {
     await this.waitForLoad(status);
   }
 
+  @needsInit()
   protected async waitForLoad(status = LocationStatus.AllContentLoaded) {
     await this.agent.mainFrameEnvironment.waitForLoad(status);
   }
