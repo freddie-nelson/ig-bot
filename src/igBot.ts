@@ -1,13 +1,9 @@
-import Hero, { LoadStatus, LocationStatus, XPathResult } from "@ulixee/hero";
+import Hero, { LoadStatus } from "@ulixee/hero";
 import Server from "@ulixee/server";
-import {
-  ClientFileChooserInterceptPlugin,
-  CoreFileChooserInterceptPlugin,
-} from "./fileChooserInterceptPlugin";
 import { useAbsolutePath } from "./utils/useAbsolutePath";
 import { useSpreadNum } from "./utils/useSpreadNum";
 import { useValidatePath } from "./utils/useValidatePath";
-import { useXPathLowerCase } from "./utils/useXPathLowerCase";
+import { useValidInstagramMedia } from "./utils/useValidInstagramMedia";
 
 export function createFlagDecorator(propertyGetter: string, errorMsg: string) {
   return () => {
@@ -104,7 +100,7 @@ export default class IGBot {
     return !this.isBusy;
   }
 
-  constructor(private username: string, private password: string) {}
+  constructor(private username: string, private password: string, private showChrome = false) {}
 
   /**
    * Initializes the instagram client.
@@ -115,7 +111,10 @@ export default class IGBot {
     this.core = new Server();
     await this.core.listen();
 
-    this.hero = new Hero({ showChrome: true, connectionToCore: { host: await this.core.address } });
+    this.hero = new Hero({
+      showChrome: this.showChrome,
+      connectionToCore: { host: await this.core.address },
+    });
     this.hero.use(require.resolve("./fileChooserInterceptPlugin"));
 
     this.document = this.hero.document;
@@ -142,6 +141,12 @@ export default class IGBot {
   @needsLogin()
   @makesBusy()
   async post(content: string | string[], caption = "") {
+    console.log(
+      `Posting ${
+        Array.isArray(content) ? `[${content.map((p) => `'${p}'`).join(", ")}]` : `'${content}'`
+      } with caption '${caption}'.`,
+    );
+
     await this.goto(this.baseInstagramUrl.href);
 
     // open post dialog
@@ -159,16 +164,26 @@ export default class IGBot {
     console.log("Waiting for file chooser.");
     const fileChooser = await this.hero.waitForFileChooser();
     const contentAbsolute = (Array.isArray(content) ? content : [content]).map(
-      (p) => (useValidatePath(p), useAbsolutePath(p)),
+      (p) => (useValidatePath(p), useValidInstagramMedia(useAbsolutePath(p))),
     );
 
     await fileChooser.chooseFiles(...contentAbsolute);
+
+    // if this button shows then an error has occured while uploading, probably file types not being supported.
+    const selectOtherFilesButton = await this.waitForElementWithText(
+      "button",
+      "Select Other Files",
+      3e3,
+    ).catch(() => null);
+    if (selectOtherFilesButton) {
+      throw new Error("Failed to upload files, most likely due to unsupported file types.");
+    }
 
     // skip next 2 pages of post dialog
     for (let i = 0; i < 2; i++) {
       const nextButton = await this.waitForElementWithText("button", "next");
       await this.hero.click(nextButton);
-      await this.hero.waitForMillis(useSpreadNum(1000));
+      await this.hero.waitForMillis(useSpreadNum(1e3));
     }
 
     // enter caption
@@ -179,6 +194,13 @@ export default class IGBot {
     // share post
     const shareButton = await this.waitForElementWithText("button", "share");
     await this.hero.click(shareButton);
+
+    await this.waitForNoElement("img[alt='Spinner placeholder']", 300e3);
+
+    if (await this.waitForElementWithText("div", "Post couldn't be shared", 3e3).catch(() => null))
+      throw new Error("Failed to post, post couldn't be shared.");
+
+    console.log("Posted.");
   }
 
   @needsFree()
@@ -286,7 +308,7 @@ export default class IGBot {
       return;
     }
 
-    const declineButton = await this.waitForElementWithText("button", "not now", 5000).catch(
+    const declineButton = await this.waitForElementWithText("button", "not now", 10000).catch(
       () => null,
     );
     if (!declineButton) {
@@ -326,34 +348,39 @@ export default class IGBot {
   }
 
   @needsInit()
+  protected async waitForNoElementWithText(
+    tag: string,
+    text: string,
+    timeout?: number,
+    exactMatch?: boolean,
+    caseSensitive?: boolean,
+    checksIntervalMs?: number,
+  ) {
+    console.log(`Waiting for no '${tag}' element to exist with textContent '${text}'.`);
+
+    return this.waitFor(
+      async () => !(await this.findElementWithText(tag, text, exactMatch, caseSensitive)),
+      timeout,
+      checksIntervalMs,
+    );
+  }
+
+  @needsInit()
   protected async waitForElementWithText(
     tag: string,
     text: string,
-    timeout = 10000,
-    exactMatch = true,
-    caseSensitive = false,
-    checksIntervalMs = 50,
+    timeout?: number,
+    exactMatch?: boolean,
+    caseSensitive?: boolean,
+    checksIntervalMs?: number,
   ) {
     console.log(`Waiting for '${tag}' element to exist with textContent '${text}'.`);
 
-    return new Promise<ReturnType<typeof this.document.querySelector>>((resolve, reject) => {
-      const id = setTimeout(() => {
-        console.log(
-          `Timeout of ${timeout}ms ran out and '${tag}' element with textContent '${text}' could not be found.`,
-        );
-        reject();
-      }, timeout);
-
-      (async () => {
-        let element: ReturnType<typeof this.document.querySelector>;
-        while (!(element = await this.findElementWithText(tag, text, exactMatch, caseSensitive))) {
-          await this.hero.waitForMillis(checksIntervalMs);
-        }
-
-        clearTimeout(id);
-        resolve(element);
-      })();
-    });
+    return this.waitFor(
+      () => this.findElementWithText(tag, text, exactMatch, caseSensitive),
+      timeout,
+      checksIntervalMs,
+    );
   }
 
   @needsInit()
@@ -371,7 +398,7 @@ export default class IGBot {
     if (!caseSensitive) text = text.toLowerCase();
 
     for (const el of elements) {
-      let elText = await el.textContent;
+      let elText = (await el.textContent) || "";
       if (!caseSensitive) elText = elText.toLowerCase();
 
       if (exactMatch && elText === text) return el;
@@ -382,58 +409,70 @@ export default class IGBot {
   }
 
   @needsInit()
-  protected async waitForNoElement(selector: string, timeout = 10000, checksIntervalMs = 50) {
+  protected async waitForNoElement(selector: string, timeout?: number, checksIntervalMs?: number) {
     console.log(`Waiting for no element to exist with selector '${selector}'.`);
 
-    return new Promise<void>((resolve, reject) => {
-      const id = setTimeout(() => {
-        console.log(
-          `Timeout of ${timeout}ms ran out and element with selector '${selector}' still existed.`,
-        );
-        reject();
-      }, timeout);
-
-      (async () => {
-        while (await this.document.querySelector(selector)) {
-          await this.hero.waitForMillis(checksIntervalMs);
-        }
-
-        clearTimeout(id);
-        resolve();
-      })();
-    });
+    return this.waitFor(
+      async () => !(await this.querySelector(selector, true)),
+      timeout,
+      checksIntervalMs,
+    );
   }
 
   @needsInit()
-  protected async waitForElement(selector: string, timeout = 10000, checksIntervalMs = 50) {
+  protected async waitForElement(selector: string, timeout?: number, checksIntervalMs?: number) {
     console.log(`Waiting for element with selector '${selector}' to exist.`);
 
-    return new Promise<ReturnType<typeof this.document.querySelector>>((resolve, reject) => {
-      const id = setTimeout(() => {
-        console.log(
-          `Timeout of ${timeout}ms ran out and no element with selector '${selector}' could be found.`,
-        );
-        reject();
-      }, timeout);
+    return this.waitFor(() => this.querySelector(selector), timeout, checksIntervalMs);
+  }
+
+  /**
+   * Waits for a value to be truthy.
+   *
+   * NOTE: `this.document` and maybe other variables will not work inside a waitForValue call for some reason.
+   *       If you need to access the document, do so via another function call.
+   *
+   * @param waitForValue THe value to wait for to be truthy
+   * @param timeout The time in ms before timing out, throws after timeout
+   * @param checksIntervalMs The time in ms between value checks
+   * @returns The last value returned from waitForValue
+   */
+  protected async waitFor<T>(
+    waitForValue: () => Promise<T>,
+    timeout = 10000,
+    checksIntervalMs = 100,
+  ) {
+    return new Promise<T>((resolve, reject) => {
+      let timedOut = false;
+      const id = timeout
+        ? setTimeout(() => {
+            timedOut = true;
+          }, timeout)
+        : null;
 
       (async () => {
-        while (!(await this.document.querySelector(selector))) {
+        let value: T;
+        while (!timedOut && !(value = await waitForValue())) {
           await this.hero.waitForMillis(checksIntervalMs);
         }
+        if (timedOut) {
+          reject();
+          return;
+        }
 
-        clearTimeout(id);
-        resolve(await this.document.querySelector(selector));
+        if (id !== null) clearTimeout(id);
+        resolve(value);
       })();
     });
   }
 
   @needsInit()
-  protected async querySelector(selector: string) {
-    console.log(`Selecting element '${selector}'.`);
+  protected async querySelector(selector: string, silent = false) {
+    if (!silent) console.log(`Selecting element '${selector}'.`);
 
     const element = await this.document.querySelector(selector);
     if (!element) {
-      console.log(`Could not find any element with selector '${selector}'.`);
+      if (!silent) console.log(`Could not find any element with selector '${selector}'.`);
       return null;
     }
 
@@ -445,7 +484,13 @@ export default class IGBot {
     console.log(`Navigating to '${url}'.`);
     await this.hero.goto(url);
     console.log("Navigated, waiting for page to load.");
-    await this.waitForLoad(waitForStatus);
+    try {
+      await this.waitForLoad(waitForStatus);
+    } catch (error) {
+      console.log("Waiting for page load failed, waiting for additional 2 seconds and continuing.");
+      console.log("waitForLoad Error (can ignore):", error);
+      await this.hero.waitForMillis(2000);
+    }
     console.log(`Opened '${url}'.`);
   }
 

@@ -23,6 +23,7 @@
     "@ulixee/hero-playground": "^2.0.0-alpha.9",
     "@ulixee/hero-plugin-utils": "^2.0.0-alpha.9",
     "@ulixee/server": "^2.0.0-alpha.9",
+    "callsite": "^1.0.0",
     "colors": "^1.4.0",
     "dotenv": "^16.0.1",
     "is-valid-path": "^0.1.1",
@@ -30,6 +31,7 @@
     "tslib": "~2.4"
   },
   "devDependencies": {
+    "@types/callsite": "^1.0.31",
     "@types/is-valid-path": "^0.1.0",
     "@types/jest": "~27.5",
     "@types/node": "~16",
