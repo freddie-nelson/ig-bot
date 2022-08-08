@@ -7,7 +7,9 @@ async function main() {
   const bot = new IGBot(process.env.INSTA_USERNAME, process.env.INSTA_PASSWORD);
   await bot.init();
   await bot.login();
-  await bot.post(resolve(__dirname, "../test-post-image.jpg"));
+  // await bot.post(resolve(__dirname, "../test-post-image.jpg"));
+  await bot.logout();
+  await bot.close();
 }
 
 main();

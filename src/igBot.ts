@@ -78,6 +78,7 @@ const gracefulHeroClose = () => {
 export default class IGBot {
   private baseInstagramUrl = new URL("https://instagram.com");
   private loginUrl = this.getUrl("/accounts/login");
+  private logoutUrl = this.getUrl("/accounts/logout");
   private onetapLoginUrl = this.getUrl("/accounts/onetap");
 
   private core: Server;
@@ -127,6 +128,7 @@ export default class IGBot {
   @needsInit()
   async close() {
     await this.hero.close();
+    await this.core.close();
   }
 
   /**
@@ -181,8 +183,22 @@ export default class IGBot {
 
   @needsFree()
   @needsInit()
+  @needsLogin()
+  @makesBusy()
+  async logout() {
+    console.log(`Logging out '${this.username}'.`);
+    await this.goto(this.logoutUrl.href);
+    await this.waitForElement("input[name='username']");
+
+    this.isLoggedIn = false;
+    console.log("Logged out.");
+  }
+
+  @needsFree()
+  @needsInit()
   @makesBusy()
   async login() {
+    console.log(`Logging in as '${this.username}'.`);
     await this.goto(this.loginUrl.href);
 
     const usernameInputSelector = "input[name='username']";
