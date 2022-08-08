@@ -4,6 +4,7 @@ async function main() {
   const bot = new IGBot("wow.wow.insta17", "Shari2612");
   await bot.init();
   await bot.login();
+  await bot.post("./test-post-image.jpg");
 }
 
 main();

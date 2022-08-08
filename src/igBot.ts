@@ -1,4 +1,8 @@
-import { Agent, LocationStatus, XPathResult } from "secret-agent";
+import Hero, { LoadStatus, LocationStatus, XPathResult } from "@ulixee/hero";
+import Server from "@ulixee/server";
+import { useAbsolutePath } from "./utils/useAbsolutePath";
+import { useSpreadNum } from "./utils/useSpreadNum";
+import { useValidatePath } from "./utils/useValidatePath";
 import { useXPathLowerCase } from "./utils/useXPathLowerCase";
 
 export function createFlagDecorator(propertyGetter: string, errorMsg: string) {
@@ -48,18 +52,18 @@ const makesBusy = () => {
   };
 };
 
-const gracefulAgentClose = () => {
+const gracefulHeroClose = () => {
   return (target: any, key: string, descriptor: PropertyDescriptor) => {
     const originalFunc = descriptor.value;
 
     descriptor.value = async function (...args: any[]) {
-      if (!this.agent || !(this.agent instanceof Agent))
+      if (!this.hero || !(this.hero instanceof Hero))
         throw new Error("Hero instance does not exist on target.");
 
       try {
         return originalFunc.apply(this, args);
       } catch (error) {
-        await this.agent.close();
+        await this.close();
         console.log("Closed hero instance.");
         throw error;
       }
@@ -72,8 +76,9 @@ export default class IGBot {
   private loginUrl = this.getUrl("/accounts/login");
   private onetapLoginUrl = this.getUrl("/accounts/onetap");
 
-  private agent: Agent;
-  private document: Agent["document"];
+  private core: Server;
+  private hero: Hero;
+  private document: Hero["document"];
 
   // client state flags
   private isInitialised = false;
@@ -102,9 +107,11 @@ export default class IGBot {
   @needsFree()
   @makesBusy()
   async init() {
-    process.env.SA_SHOW_BROWSER = "true";
-    this.agent = new Agent({ showReplay: false });
-    this.document = this.agent.document;
+    this.core = new Server();
+    await this.core.listen();
+
+    this.hero = new Hero({ showChrome: true, connectionToCore: { host: await this.core.address } });
+    this.document = this.hero.document;
     this.isInitialised = true;
 
     await this.goto(this.baseInstagramUrl.href);
@@ -113,15 +120,52 @@ export default class IGBot {
 
   @needsInit()
   async close() {
-    await this.agent.close();
+    await this.hero.close();
   }
 
+  /**
+   * Creates a post.
+   *
+   * @param content The content to post, an array of values will be posted as a slideshow
+   * @param caption The caption to add to the post, default is no caption.
+   */
   @needsFree()
   @needsInit()
   @needsLogin()
   @makesBusy()
-  async post() {
+  async post(content: string | string[], caption = "") {
     await this.goto(this.baseInstagramUrl.href);
+
+    // open post dialog
+    const createPostButton = await this.waitForElement("[aria-label='New post']");
+    await this.hero.click(createPostButton);
+
+    // upload files
+    const chooseFileButton = await this.waitForElementWithText("button", "select from computer");
+    await this.hero.click(chooseFileButton);
+
+    const fileChooser = await this.hero.waitForFileChooser();
+    const contentAbsolute = (Array.isArray(content) ? content : [content]).map(
+      (p) => (useValidatePath(p), useAbsolutePath(p)),
+    );
+
+    await fileChooser.chooseFiles(...contentAbsolute);
+
+    // skip next 2 pages of post dialog
+    for (let i = 0; i < 2; i++) {
+      const nextButton = await this.waitForElementWithText("button", "next");
+      await this.hero.click(nextButton);
+      await this.hero.waitForMillis(useSpreadNum(1000));
+    }
+
+    // enter caption
+    const captionInput = await this.waitForElement("textarea[aria-label='Write a caption...']");
+    await this.hero.click(captionInput);
+    await this.hero.type(caption);
+
+    // share post
+    const shareButton = await this.waitForElementWithText("button", "share");
+    await this.hero.click(shareButton);
   }
 
   @needsFree()
@@ -129,7 +173,6 @@ export default class IGBot {
   @makesBusy()
   async login() {
     await this.goto(this.loginUrl.href);
-    await this.acceptCookieConsent();
 
     const usernameInputSelector = "input[name='username']";
     const usernameInput = await this.querySelector(usernameInputSelector);
@@ -141,22 +184,22 @@ export default class IGBot {
     const submitButton = await this.querySelector(submitButtonSelector);
 
     console.log(`Entering username, '${this.username}'.`);
-    await this.agent.click(usernameInput);
-    await this.agent.type(this.username);
+    await this.hero.click(usernameInput);
+    await this.hero.type(this.username);
 
     console.log(`Entering password, '${this.password}'.`);
-    await this.agent.click(passwordInput);
-    await this.agent.type(this.password);
+    await this.hero.click(passwordInput);
+    await this.hero.type(this.password);
 
     console.log("Submitting login details.");
-    await this.agent.click(submitButton);
+    await this.hero.click(submitButton);
 
     // wait for response
     const loadingSpinnerSelector = `${submitButtonSelector} [data-visualcompletion='loading-state']`;
     const loadingSpinner = await this.querySelector(loadingSpinnerSelector);
-    await this.agent.waitForElement(loadingSpinner);
+    await this.hero.waitForElement(loadingSpinner);
     await this.waitForNoElement(loadingSpinnerSelector);
-    await this.agent.waitForMillis(500);
+    await this.hero.waitForMillis(500);
 
     console.log("Checking for login errors.");
     const errorMsg = await this.querySelector("[role='alert']");
@@ -191,7 +234,7 @@ export default class IGBot {
     const declineButton = await this.findElementWithText("button", "not now");
 
     console.log("Declining onetap login.");
-    await this.agent.click(declineButton);
+    await this.hero.click(declineButton);
 
     console.log("Waiting for redirect to instagram homepage.");
     await this.waitForNavigation();
@@ -203,7 +246,7 @@ export default class IGBot {
   @makesBusy()
   async declineNotifications() {
     await this.goto(this.baseInstagramUrl.href);
-    await this.agent.waitForMillis(1000);
+    await this.hero.waitForMillis(1000);
 
     console.log("Checking for notifications consent modal.");
     const notificationsModalSelector = "div[role='dialog']";
@@ -216,20 +259,22 @@ export default class IGBot {
       return;
     }
 
-    const declineButton = await this.waitForElementWithText("button", "not now", 3000);
+    const declineButton = await this.waitForElementWithText("button", "not now", 5000).catch(
+      () => null,
+    );
     if (!declineButton) {
       console.log("No notifications decline button found.");
       return;
     }
 
-    await this.agent.click(declineButton);
+    await this.hero.click(declineButton);
     await this.waitForNoElement(notificationsModalSelector);
     console.log("Declined notifications.");
   }
 
   @needsInit()
   async acceptCookieConsent() {
-    await this.agent.waitForPaintingStable();
+    await this.hero.waitForPaintingStable();
 
     console.log("Checking for cookie consent modal.");
     const consentModalSelector = "div[role='dialog']";
@@ -248,7 +293,7 @@ export default class IGBot {
       return;
     }
 
-    await this.agent.click(acceptBtn);
+    await this.hero.click(acceptBtn);
     await this.waitForNoElement(consentModalSelector);
     console.log("Accepted cookies.");
   }
@@ -275,7 +320,7 @@ export default class IGBot {
       (async () => {
         let element: ReturnType<typeof this.document.querySelector>;
         while (!(element = await this.findElementWithText(tag, text, exactMatch, caseSensitive))) {
-          await this.agent.waitForMillis(checksIntervalMs);
+          await this.hero.waitForMillis(checksIntervalMs);
         }
 
         clearTimeout(id);
@@ -323,7 +368,7 @@ export default class IGBot {
 
       (async () => {
         while (await this.document.querySelector(selector)) {
-          await this.agent.waitForMillis(checksIntervalMs);
+          await this.hero.waitForMillis(checksIntervalMs);
         }
 
         clearTimeout(id);
@@ -346,7 +391,7 @@ export default class IGBot {
 
       (async () => {
         while (!(await this.document.querySelector(selector))) {
-          await this.agent.waitForMillis(checksIntervalMs);
+          await this.hero.waitForMillis(checksIntervalMs);
         }
 
         clearTimeout(id);
@@ -369,16 +414,16 @@ export default class IGBot {
   }
 
   @needsInit()
-  protected async goto(url: string, waitForStatus?: LocationStatus) {
+  protected async goto(url: string, waitForStatus?: LoadStatus) {
     console.log(`Navigating to '${url}'.`);
-    await this.agent.goto(url);
+    await this.hero.goto(url);
     console.log("Navigated, waiting for page to load.");
     await this.waitForLoad(waitForStatus);
     console.log(`Opened '${url}'.`);
   }
 
   /**
-   * Calls waitForNavigation if `agent.url` includes `match`.
+   * Calls waitForNavigation if `hero.url` includes `match`.
    *
    * @param match The string to match for in the url
    * @param trigger The waitForLocation trigger
@@ -388,29 +433,26 @@ export default class IGBot {
   protected async waitForNavigationConditional(
     match: string,
     trigger: "change" | "reload" = "change",
-    status?: LocationStatus,
+    status?: LoadStatus,
   ) {
-    if ((await this.agent.url).includes(match)) await this.waitForNavigation(trigger, status);
+    if ((await this.hero.url).includes(match)) await this.waitForNavigation(trigger, status);
   }
 
   /**
-   * Calls agent's waitForLocation and then waitForLoad.
+   * Calls hero's waitForLocation and then waitForLoad.
    *
    * @param trigger The waitForLocation trigger
    * @param status The waitForLoad status to wait for from the page
    */
   @needsInit()
-  protected async waitForNavigation(
-    trigger: "change" | "reload" = "change",
-    status?: LocationStatus,
-  ) {
-    await this.agent.waitForLocation(trigger);
+  protected async waitForNavigation(trigger: "change" | "reload" = "change", status?: LoadStatus) {
+    await this.hero.waitForLocation(trigger);
     await this.waitForLoad(status);
   }
 
   @needsInit()
-  protected async waitForLoad(status = LocationStatus.AllContentLoaded) {
-    await this.agent.mainFrameEnvironment.waitForLoad(status);
+  protected async waitForLoad(status: LoadStatus = LoadStatus.AllContentLoaded) {
+    await this.hero.waitForLoad(status);
   }
 
   private getUrl(path: string) {
