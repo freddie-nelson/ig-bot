@@ -1,5 +1,9 @@
 import Hero, { LoadStatus, LocationStatus, XPathResult } from "@ulixee/hero";
 import Server from "@ulixee/server";
+import {
+  ClientFileChooserInterceptPlugin,
+  CoreFileChooserInterceptPlugin,
+} from "./fileChooserInterceptPlugin";
 import { useAbsolutePath } from "./utils/useAbsolutePath";
 import { useSpreadNum } from "./utils/useSpreadNum";
 import { useValidatePath } from "./utils/useValidatePath";
@@ -111,6 +115,8 @@ export default class IGBot {
     await this.core.listen();
 
     this.hero = new Hero({ showChrome: true, connectionToCore: { host: await this.core.address } });
+    this.hero.use(require.resolve("./fileChooserInterceptPlugin"));
+
     this.document = this.hero.document;
     this.isInitialised = true;
 
@@ -140,10 +146,15 @@ export default class IGBot {
     const createPostButton = await this.waitForElement("[aria-label='New post']");
     await this.hero.click(createPostButton);
 
+    await this.waitForElement("div[role='dialog']");
+
     // upload files
+    await (this.hero as any).interceptFileChooser();
+
     const chooseFileButton = await this.waitForElementWithText("button", "select from computer");
     await this.hero.click(chooseFileButton);
 
+    console.log("Waiting for file chooser.");
     const fileChooser = await this.hero.waitForFileChooser();
     const contentAbsolute = (Array.isArray(content) ? content : [content]).map(
       (p) => (useValidatePath(p), useAbsolutePath(p)),

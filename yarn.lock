@@ -1209,7 +1209,7 @@
     nanoid "^3.1.30"
     ws "^7.4.6"
 
-"@ulixee/hero-interfaces@2.0.0-alpha.9":
+"@ulixee/hero-interfaces@2.0.0-alpha.9", "@ulixee/hero-interfaces@^2.0.0-alpha.9":
   version "2.0.0-alpha.9"
   resolved "https://registry.yarnpkg.com/@ulixee/hero-interfaces/-/hero-interfaces-2.0.0-alpha.9.tgz#2709b62384071705b7baf524c4e76c6cb2cd7f08"
   integrity sha512-L9r2YuT8LJSSZvB/1N/Vx+eAsHX0fT2mLXkrwn53a5HGvnID0pcqICOlcMzpOdDKkq9VHiZ/RdPdnXf+as1ShQ==
@@ -1230,7 +1230,7 @@
     "@ulixee/hero-core" "2.0.0-alpha.9"
     "@ulixee/server" "2.0.0-alpha.9"
 
-"@ulixee/hero-plugin-utils@2.0.0-alpha.9":
+"@ulixee/hero-plugin-utils@2.0.0-alpha.9", "@ulixee/hero-plugin-utils@^2.0.0-alpha.9":
   version "2.0.0-alpha.9"
   resolved "https://registry.yarnpkg.com/@ulixee/hero-plugin-utils/-/hero-plugin-utils-2.0.0-alpha.9.tgz#7298e9af71055a96fee9b57beb302d8637cf7590"
   integrity sha512-XSDQu8XsSZp5zyC4CGmUgyM039Q1Dd6C6rUa+pxFu3v6wAVJmFFJWxIM2+HLxSSnx4WIO/lu+pes977tXq5k4Q==

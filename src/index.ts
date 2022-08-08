@@ -1,3 +1,4 @@
+import { resolve } from "path";
 import IGBot from "./igBot";
 import dotenv from "dotenv";
 dotenv.config();
@@ -6,12 +7,11 @@ async function main() {
   const bot = new IGBot(process.env.INSTA_USERNAME, process.env.INSTA_PASSWORD);
   await bot.init();
   await bot.login();
-  await bot.post("./test-post-image.jpg");
+  await bot.post(resolve(__dirname, "../test-post-image.jpg"));
 }
 
 main();
 
-// import { resolve } from "path";
 // import Hero from "@ulixee/hero";
 // import Server from "@ulixee/server";
 
