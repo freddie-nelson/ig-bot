@@ -76,6 +76,7 @@ export default class IGBot {
   private loginUrl = this.getUrl("/accounts/login");
   private logoutUrl = this.getUrl("/accounts/logout");
   private onetapLoginUrl = this.getUrl("/accounts/onetap");
+  private editAccountUrl = this.getUrl("/accounts/edit");
 
   private core: Server;
   private hero: Hero;
@@ -128,6 +129,68 @@ export default class IGBot {
   async close() {
     await this.hero.close();
     await this.core.close();
+  }
+
+  async getProfile() {
+    await this.goto(this.editAccountUrl.href, true);
+
+    return {
+      name: await this.getName(),
+      username: this.getUsername(),
+      password: this.getPassword(),
+      email: await this.getEmail(),
+      phoneNo: await this.getPhoneNo(),
+    };
+  }
+
+  async getChaining() {
+    await this.goto(this.editAccountUrl.href, true);
+    const input = await this.waitForElement("#pepChainingEnabled input[type='checkbox']");
+    return await input.checked;
+  }
+
+  async getGender() {
+    await this.goto(this.editAccountUrl.href, true);
+    const input = await this.waitForElement("#pepGender");
+    return await input.value;
+  }
+
+  async getPhoneNo() {
+    await this.goto(this.editAccountUrl.href, true);
+    const input = await this.waitForElement("[id='pepPhone Number']");
+    return await input.value;
+  }
+
+  async getEmail() {
+    await this.goto(this.editAccountUrl.href, true);
+    const input = await this.waitForElement("#pepEmail");
+    return await input.value;
+  }
+
+  async getBio() {
+    await this.goto(this.editAccountUrl.href, true);
+    const input = await this.waitForElement("#pepBio");
+    return await input.value;
+  }
+
+  async getWebsite() {
+    await this.goto(this.editAccountUrl.href, true);
+    const input = await this.waitForElement("#pepWebsite");
+    return await input.value;
+  }
+
+  async getName() {
+    await this.goto(this.editAccountUrl.href, true);
+    const input = await this.waitForElement("#pepName");
+    return await input.value;
+  }
+
+  getUsername() {
+    return this.username;
+  }
+
+  getPassword() {
+    return this.password;
   }
 
   /**
@@ -245,10 +308,9 @@ export default class IGBot {
 
     // wait for response
     const loadingSpinnerSelector = `${submitButtonSelector} [data-visualcompletion='loading-state']`;
-    const loadingSpinner = await this.querySelector(loadingSpinnerSelector);
-    await this.hero.waitForElement(loadingSpinner);
-    await this.waitForNoElement(loadingSpinnerSelector);
-    await this.hero.waitForMillis(500);
+    await this.waitForElement(loadingSpinnerSelector, 5e3).catch(() => null);
+    await this.waitForNoElement(loadingSpinnerSelector, 30e3);
+    await this.hero.waitForMillis(1000);
 
     console.log("Checking for login errors.");
     const errorMsg = await this.querySelector("[role='alert']");
@@ -278,7 +340,7 @@ export default class IGBot {
   @needsLogin()
   @makesBusy()
   async declineOnetapLogin() {
-    await this.goto(this.onetapLoginUrl.href);
+    await this.goto(this.onetapLoginUrl.href, true);
 
     const declineButton = await this.findElementWithText("button", "not now");
 
@@ -294,12 +356,12 @@ export default class IGBot {
   @needsLogin()
   @makesBusy()
   async declineNotifications() {
-    await this.goto(this.baseInstagramUrl.href);
-    await this.hero.waitForMillis(1000);
+    await this.goto(this.baseInstagramUrl.href, true);
+    await this.hero.waitForMillis(1e3);
 
     console.log("Checking for notifications consent modal.");
     const notificationsModalSelector = "div[role='dialog']";
-    const notificationsModal = this.waitForElement(notificationsModalSelector, 5000).catch(
+    const notificationsModal = this.waitForElement(notificationsModalSelector, 5e3).catch(
       () => null,
     );
 
@@ -308,7 +370,7 @@ export default class IGBot {
       return;
     }
 
-    const declineButton = await this.waitForElementWithText("button", "not now", 10000).catch(
+    const declineButton = await this.waitForElementWithText("button", "not now", 10e3).catch(
       () => null,
     );
     if (!declineButton) {
@@ -327,7 +389,7 @@ export default class IGBot {
 
     console.log("Checking for cookie consent modal.");
     const consentModalSelector = "div[role='dialog']";
-    const consentModal = await this.waitForElement(consentModalSelector, 2000).catch(() => null);
+    const consentModal = await this.waitForElement(consentModalSelector, 2e3).catch(() => null);
 
     if (!consentModal) {
       console.log("No cookie consent modal found.");
@@ -439,7 +501,7 @@ export default class IGBot {
    */
   protected async waitFor<T>(
     waitForValue: () => Promise<T>,
-    timeout = 10000,
+    timeout = 10e3,
     checksIntervalMs = 100,
   ) {
     return new Promise<T>((resolve, reject) => {
@@ -480,7 +542,9 @@ export default class IGBot {
   }
 
   @needsInit()
-  protected async goto(url: string, waitForStatus?: LoadStatus) {
+  protected async goto(url: string, skipIfAlreadyOnUrl = false, waitForStatus?: LoadStatus) {
+    if (skipIfAlreadyOnUrl && (await this.hero.url) === url) return;
+
     console.log(`Navigating to '${url}'.`);
     await this.hero.goto(url);
     console.log("Navigated, waiting for page to load.");
@@ -489,7 +553,7 @@ export default class IGBot {
     } catch (error) {
       console.log("Waiting for page load failed, waiting for additional 2 seconds and continuing.");
       console.log("waitForLoad Error (can ignore):", error);
-      await this.hero.waitForMillis(2000);
+      await this.hero.waitForMillis(2e3);
     }
     console.log(`Opened '${url}'.`);
   }
