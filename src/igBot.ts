@@ -1,5 +1,6 @@
 import Hero, { LoadStatus } from "@ulixee/hero";
 import Server from "@ulixee/server";
+import { Profile } from "./profile";
 import { useAbsolutePath } from "./utils/useAbsolutePath";
 import { useSpreadNum } from "./utils/useSpreadNum";
 import { useValidatePath } from "./utils/useValidatePath";
@@ -131,65 +132,69 @@ export default class IGBot {
     await this.core.close();
   }
 
-  async getProfile() {
+  async getProfile(): Promise<Profile> {
     await this.goto(this.editAccountUrl.href, true);
 
     return {
-      name: await this.getName(),
       username: this.getUsername(),
       password: this.getPassword(),
       email: await this.getEmail(),
+      name: await this.getName(),
       phoneNo: await this.getPhoneNo(),
+      gender: await this.getGender(),
+      bio: await this.getBio(),
+      website: await this.getWebsite(),
+      chaining: await this.getChaining(),
     };
   }
 
-  async getChaining() {
+  async getChaining(): Promise<Profile["chaining"]> {
     await this.goto(this.editAccountUrl.href, true);
     const input = await this.waitForElement("#pepChainingEnabled input[type='checkbox']");
     return await input.checked;
   }
 
-  async getGender() {
+  async getGender(): Promise<Profile["gender"]> {
     await this.goto(this.editAccountUrl.href, true);
     const input = await this.waitForElement("#pepGender");
-    return await input.value;
+    return String(await input.value);
   }
 
-  async getPhoneNo() {
+  async getPhoneNo(): Promise<Profile["phoneNo"]> {
     await this.goto(this.editAccountUrl.href, true);
     const input = await this.waitForElement("[id='pepPhone Number']");
-    return await input.value;
+    return String(await input.value);
   }
 
-  async getEmail() {
+  async getEmail(): Promise<Profile["email"]> {
     await this.goto(this.editAccountUrl.href, true);
     const input = await this.waitForElement("#pepEmail");
-    return await input.value;
+    return String(await input.value);
   }
 
-  async getBio() {
+  async getBio(): Promise<Profile["bio"]> {
     await this.goto(this.editAccountUrl.href, true);
-    const input = await this.waitForElement("#pepBio");
-    return await input.value;
+    const textarea = await this.waitForElement("#pepBio");
+    return String(await textarea.value);
   }
 
-  async getWebsite() {
+  async getWebsite(): Promise<Profile["website"]> {
     await this.goto(this.editAccountUrl.href, true);
     const input = await this.waitForElement("#pepWebsite");
-    return await input.value;
+    return String(await input.value);
   }
 
-  async getName() {
+  async getName(): Promise<Profile["name"]> {
     await this.goto(this.editAccountUrl.href, true);
     const input = await this.waitForElement("#pepName");
-    return await input.value;
+    return String(await input.value);
   }
 
-  getUsername() {
+  getUsername(): Profile["username"] {
     return this.username;
   }
 
-  getPassword() {
+  getPassword(): Profile["password"] {
     return this.password;
   }
 
