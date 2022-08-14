@@ -1,9 +1,10 @@
 import IGBot from "./igBot";
 import dotenv from "dotenv";
+import { ProfileGender } from "./profile";
 dotenv.config();
 
 async function main() {
-  const bot = new IGBot(process.env.INSTA_USERNAME, process.env.INSTA_PASSWORD, true);
+  const bot = new IGBot(process.env.INSTA_USERNAME, process.env.INSTA_PASSWORD, false);
   await bot.init();
   await bot.login();
   // await bot.post("../test-post-video-0.mp4", "what an awesome funny meme video");
@@ -13,8 +14,20 @@ async function main() {
   //   "what an awesome funny meme post",
   // );
   // }
-  const profile = await bot.getProfile();
-  console.log(profile);
+  console.log(await bot.getProfile());
+  await bot.setProfile({
+    username: "simpkingmemes.v2",
+    password: process.env.INSTA_USERNAME + "!",
+    // email: "deathturd69@aol.com",
+    // name: "Epic Funny Meme Man",
+    phoneNo: "+447452989421",
+    gender: ProfileGender.MALE,
+    // customGender: "poggers",
+    bio: "poggers poggers poggers poggers poggers",
+    website: "https://memerman.com",
+    chaining: true,
+  });
+  console.log(await bot.getProfile());
   // await bot.logout();
   await bot.close();
 }

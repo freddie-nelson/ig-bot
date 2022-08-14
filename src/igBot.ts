@@ -1,8 +1,10 @@
-import Hero, { LoadStatus } from "@ulixee/hero";
+import Hero, { ISuperElement, KeyboardKey, LoadStatus } from "@ulixee/hero";
+import { ITypeInteraction } from "@ulixee/hero/interfaces/IInteractions";
 import Server from "@ulixee/server";
-import { Profile } from "./profile";
+import { Profile, ProfileGender } from "./profile";
 import { useAbsolutePath } from "./utils/useAbsolutePath";
 import { useSpreadNum } from "./utils/useSpreadNum";
+import { useValidateEmail } from "./utils/useValidateEmail";
 import { useValidatePath } from "./utils/useValidatePath";
 import { useValidInstagramMedia } from "./utils/useValidInstagramMedia";
 import { useValidURL } from "./utils/useValidURL";
@@ -79,6 +81,7 @@ export default class IGBot {
   private logoutUrl = this.getUrl("/accounts/logout");
   private onetapLoginUrl = this.getUrl("/accounts/onetap");
   private editAccountUrl = this.getUrl("/accounts/edit");
+  private changePasswordUrl = this.getUrl("/accounts/password/change");
 
   private core: Server;
   private hero: Hero;
@@ -134,6 +137,218 @@ export default class IGBot {
   }
 
   //
+  // Set Profile Details Methods
+  //
+
+  async setProfile(profile: Partial<Profile> & { customGender?: string }) {
+    await this.goto(this.editAccountUrl.href);
+
+    if (profile.chaining) await this.setChaining(profile.chaining);
+    if (profile.gender && profile.gender !== ProfileGender.CUSTOM)
+      await this.setGender(profile.gender);
+    if (profile.gender && profile.gender === ProfileGender.CUSTOM)
+      await this.setGender(profile.gender, profile.customGender);
+    if (profile.phoneNo) await this.setPhoneNo(profile.phoneNo);
+    if (profile.email) await this.setEmail(profile.email);
+    if (profile.bio) await this.setBio(profile.bio);
+    if (profile.website) await this.setWebsite(profile.website);
+    if (profile.name) await this.setName(profile.name);
+    if (profile.username) await this.setUsername(profile.username);
+    if (profile.password) await this.setPassword(profile.password);
+  }
+
+  async setChaining(chaining: Profile["chaining"]) {
+    await this.goto(this.editAccountUrl.href, true);
+
+    const { element, input } = await this.getChainingElement();
+    if ((await input.checked) !== chaining) {
+      await this.hero.click(element);
+      await this.saveProfileChanges(`Could not set chaining to '${chaining}', try again.`);
+    }
+  }
+
+  async setGender(
+    gender: ProfileGender.MALE | ProfileGender.FEMALE | ProfileGender.PREFER_NOT_TO_SAY,
+  ): Promise<void>;
+  async setGender(gender: ProfileGender.CUSTOM, customGender: string): Promise<void>;
+
+  async setGender(gender: ProfileGender, customGender?: string) {
+    if (gender === ProfileGender.CUSTOM && !customGender)
+      throw new Error(`Custom gender is being set but no custom gender was provided.`);
+
+    await this.goto(this.editAccountUrl.href, true);
+
+    const input = await this.getGenderElement();
+    await this.hero.click(input);
+
+    const fieldset = await this.waitForElement("fieldset");
+    const [male, female, custom, preferNotToSay] = Array.from(await fieldset.children);
+
+    switch (gender) {
+      case ProfileGender.MALE:
+        await this.hero.click(male);
+        break;
+      case ProfileGender.FEMALE:
+        await this.hero.click(female);
+        break;
+      case ProfileGender.PREFER_NOT_TO_SAY:
+        await this.hero.click(preferNotToSay);
+        break;
+      case ProfileGender.CUSTOM: {
+        await this.hero.click(custom);
+        const customInput = await this.waitForElement("input[name='customGenderSelection']");
+        await this.hero.click(customInput);
+        await this.clearInput();
+        await this.hero.type(customGender);
+        break;
+      }
+    }
+
+    const doneButton = await this.waitForElementWithText("div[role='dialog'] button", "Done");
+    await this.hero.click(doneButton);
+    await this.waitForNoElement("div[role='dialog']");
+  }
+
+  async setPhoneNo(phoneNo: Profile["phoneNo"]) {
+    await this.goto(this.editAccountUrl.href, true);
+
+    const input = await this.getPhoneNoElement();
+    await this.hero.click(input);
+    await this.clearInput();
+    await this.hero.type(phoneNo);
+
+    await this.saveProfileChanges(
+      `Could not set phone number to '${phoneNo}', check the provided phone number is valid and try again.`,
+    );
+  }
+
+  async setEmail(email: Profile["email"]) {
+    if (!useValidateEmail(email)) throw new Error("Invalid email address.");
+
+    await this.goto(this.editAccountUrl.href, true);
+
+    const input = await this.getEmailElement();
+    await this.hero.click(input);
+    await this.clearInput();
+    await this.hero.type(email);
+
+    await this.saveProfileChanges(
+      `Could not set email to '${email}', check the provided email is valid and try again.`,
+    );
+  }
+
+  async setBio(bio: Profile["bio"]) {
+    if (bio.length > 150) throw new Error("Bio cannot be longer than 150 characters.");
+
+    await this.goto(this.editAccountUrl.href, true);
+
+    const input = await this.getBioElement();
+    await this.hero.click(input);
+    await this.clearInput();
+    await this.hero.type(bio);
+
+    await this.saveProfileChanges(
+      `Could not set bio to '${bio}', check the provided bio is valid and try again.`,
+    );
+  }
+
+  async setWebsite(url: Profile["website"]) {
+    if (!useValidURL(url)) throw new Error("Invalid url.");
+
+    await this.goto(this.editAccountUrl.href, true);
+
+    const input = await this.getWebsiteElement();
+    await this.hero.click(input);
+    await this.clearInput();
+    await this.hero.type(url);
+
+    await this.saveProfileChanges(
+      `Could not set website to '${url}', check the provided url is valid and try again.`,
+    );
+  }
+
+  async setName(name: Profile["name"]) {
+    if (name.length >= 64) throw new Error("Name must be less than 64 characters.");
+
+    await this.goto(this.editAccountUrl.href, true);
+
+    const input = await this.getNameElement();
+    await this.hero.click(input);
+    await this.clearInput();
+    await this.hero.type(name);
+
+    await this.saveProfileChanges(
+      `Could not set name to '${name}', check the provided name is valid and try again.`,
+    );
+  }
+
+  async setUsername(username: Profile["username"]) {
+    if (!username) throw new Error("Username cannot be empty.");
+    if (username.length >= 30) throw new Error("Username must be less than 30 characters.");
+    if (username.match(/[^a-zA-Z0-9_.]/))
+      throw new Error(
+        "Username can only contain alphanumeric characters, underscores and periods.",
+      );
+
+    await this.goto(this.editAccountUrl.href, true);
+
+    const input = await this.getUsernameElement();
+    await this.hero.click(input);
+    await this.clearInput();
+    await this.hero.type(username);
+
+    await this.saveProfileChanges(
+      `Could not set username to '${username}', check the provided username is valid and try again.`,
+    );
+
+    this.username = username;
+  }
+
+  async setPassword(password: Profile["password"]) {
+    if (!password) throw new Error("Password cannot be empty.");
+    if (password.length < 6) throw new Error("Password must be at least 6 characters.");
+
+    await this.goto(this.changePasswordUrl.href);
+
+    const oldPassword = await this.waitForElement("input[name='cppOldPassword']");
+    const newPassword = await this.waitForElement("input[name='cppNewPassword']");
+    const confirmNewPassword = await this.waitForElement("input[name='cppConfirmPassword']");
+
+    await this.hero.click(oldPassword);
+    await this.hero.type(this.password);
+
+    await this.hero.click(newPassword);
+    await this.hero.type(password);
+
+    await this.hero.click(confirmNewPassword);
+    await this.hero.type(password);
+
+    const changePasswordButton = await this.waitForElementWithText("button", "Change Password");
+    await this.hero.click(changePasswordButton);
+
+    const toastText = await this.waitForElement("div > div > div > div > div > p");
+    if ((await toastText.textContent) !== "Password changed.")
+      throw new Error(
+        `Could not set password to '${password}', check the provided password is valid and try again.\nInstagram Error: ${await toastText.textContent}`,
+      );
+
+    this.password = password;
+  }
+
+  async saveProfileChanges(errorMsg: string) {
+    const submitButton = await this.waitForElementWithText("button", "Submit");
+    if (await submitButton.disabled) return;
+
+    await this.hero.click(submitButton);
+
+    const toastText = await this.waitForElement("div > div > div > div > div > p");
+    if ((await toastText.textContent) !== "Profile saved.")
+      throw new Error(`${errorMsg}\nInstagram Error: ${await toastText.textContent}`);
+
+    await this.hero.waitForMillis(1e3);
+  }
+
+  //
   // Get Profile Details Methods
   //
 
@@ -162,7 +377,7 @@ export default class IGBot {
   async getGender(): Promise<Profile["gender"]> {
     await this.goto(this.editAccountUrl.href, true);
     const input = await this.getGenderElement();
-    return String(await input.value);
+    return <Profile["gender"]>String(await input.value);
   }
 
   async getPhoneNo(): Promise<Profile["phoneNo"]> {
@@ -239,6 +454,10 @@ export default class IGBot {
 
   async getNameElement() {
     return await this.waitForElement("#pepName");
+  }
+
+  async getUsernameElement() {
+    return await this.waitForElement("#pepUsername");
   }
 
   /**
@@ -457,19 +676,42 @@ export default class IGBot {
     console.log("Accepted cookies.");
   }
 
+  async repeatKey(key: ITypeInteraction, count: number) {
+    for (let i = 0; i < count; i++) {
+      await this.hero.type(key);
+      await this.hero.waitForMillis(40);
+    }
+  }
+
+  /**
+   * Performs Ctrl+A, then Backspace.
+   *
+   * Make sure you have a focused element before calling this.
+   */
+  async clearInput() {
+    // select all text in input
+    await this.hero.interact({ keyDown: KeyboardKey.ControlLeft });
+    await this.hero.interact({ keyDown: KeyboardKey.A });
+    await this.hero.interact({ keyUp: KeyboardKey.A });
+    await this.hero.interact({ keyUp: KeyboardKey.ControlLeft });
+
+    // delete all text in input
+    await this.hero.type(KeyboardKey.Backspace);
+  }
+
   @needsInit()
   protected async waitForNoElementWithText(
-    tag: string,
+    selector: string,
     text: string,
     timeout?: number,
     exactMatch?: boolean,
     caseSensitive?: boolean,
     checksIntervalMs?: number,
   ) {
-    console.log(`Waiting for no '${tag}' element to exist with textContent '${text}'.`);
+    console.log(`Waiting for no '${selector}' element to exist with textContent '${text}'.`);
 
     return this.waitFor(
-      async () => !(await this.findElementWithText(tag, text, exactMatch, caseSensitive)),
+      async () => !(await this.findElementWithText(selector, text, exactMatch, caseSensitive)),
       timeout,
       checksIntervalMs,
     );
@@ -477,17 +719,17 @@ export default class IGBot {
 
   @needsInit()
   protected async waitForElementWithText(
-    tag: string,
+    selector: string,
     text: string,
     timeout?: number,
     exactMatch?: boolean,
     caseSensitive?: boolean,
     checksIntervalMs?: number,
   ) {
-    console.log(`Waiting for '${tag}' element to exist with textContent '${text}'.`);
+    console.log(`Waiting for '${selector}' element to exist with textContent '${text}'.`);
 
     return this.waitFor(
-      () => this.findElementWithText(tag, text, exactMatch, caseSensitive),
+      () => this.findElementWithText(selector, text, exactMatch, caseSensitive),
       timeout,
       checksIntervalMs,
     );
@@ -495,15 +737,17 @@ export default class IGBot {
 
   @needsInit()
   protected async findElementWithText(
-    tag: string,
+    selector: string,
     text: string,
     exactMatch = true,
     caseSensitive = false,
   ) {
     console.log(
-      `Finding '${tag}' element with textContent ${exactMatch ? "of" : "containing"} '${text}'.`,
+      `Finding '${selector}' element with textContent ${
+        exactMatch ? "of" : "containing"
+      } '${text}'.`,
     );
-    const elements = await this.document.querySelectorAll(tag);
+    const elements = await this.document.querySelectorAll(selector);
 
     if (!caseSensitive) text = text.toLowerCase();
 
