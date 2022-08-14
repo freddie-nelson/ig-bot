@@ -3,7 +3,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 async function main() {
-  const bot = new IGBot(process.env.INSTA_USERNAME, process.env.INSTA_PASSWORD, false);
+  const bot = new IGBot(process.env.INSTA_USERNAME, process.env.INSTA_PASSWORD, true);
   await bot.init();
   await bot.login();
   // await bot.post("../test-post-video-0.mp4", "what an awesome funny meme video");

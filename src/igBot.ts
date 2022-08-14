@@ -5,6 +5,7 @@ import { useAbsolutePath } from "./utils/useAbsolutePath";
 import { useSpreadNum } from "./utils/useSpreadNum";
 import { useValidatePath } from "./utils/useValidatePath";
 import { useValidInstagramMedia } from "./utils/useValidInstagramMedia";
+import { useValidURL } from "./utils/useValidURL";
 
 export function createFlagDecorator(propertyGetter: string, errorMsg: string) {
   return () => {
@@ -73,7 +74,7 @@ const gracefulHeroClose = () => {
 };
 
 export default class IGBot {
-  private baseInstagramUrl = new URL("https://instagram.com");
+  private baseInstagramUrl = new URL("https://www.instagram.com");
   private loginUrl = this.getUrl("/accounts/login");
   private logoutUrl = this.getUrl("/accounts/logout");
   private onetapLoginUrl = this.getUrl("/accounts/onetap");
@@ -132,6 +133,10 @@ export default class IGBot {
     await this.core.close();
   }
 
+  //
+  // Get Profile Details Methods
+  //
+
   async getProfile(): Promise<Profile> {
     await this.goto(this.editAccountUrl.href, true);
 
@@ -150,43 +155,43 @@ export default class IGBot {
 
   async getChaining(): Promise<Profile["chaining"]> {
     await this.goto(this.editAccountUrl.href, true);
-    const input = await this.waitForElement("#pepChainingEnabled input[type='checkbox']");
+    const { input } = await this.getChainingElement();
     return await input.checked;
   }
 
   async getGender(): Promise<Profile["gender"]> {
     await this.goto(this.editAccountUrl.href, true);
-    const input = await this.waitForElement("#pepGender");
+    const input = await this.getGenderElement();
     return String(await input.value);
   }
 
   async getPhoneNo(): Promise<Profile["phoneNo"]> {
     await this.goto(this.editAccountUrl.href, true);
-    const input = await this.waitForElement("[id='pepPhone Number']");
+    const input = await this.getPhoneNoElement();
     return String(await input.value);
   }
 
   async getEmail(): Promise<Profile["email"]> {
     await this.goto(this.editAccountUrl.href, true);
-    const input = await this.waitForElement("#pepEmail");
+    const input = await this.getEmailElement();
     return String(await input.value);
   }
 
   async getBio(): Promise<Profile["bio"]> {
     await this.goto(this.editAccountUrl.href, true);
-    const textarea = await this.waitForElement("#pepBio");
+    const textarea = await this.getBioElement();
     return String(await textarea.value);
   }
 
   async getWebsite(): Promise<Profile["website"]> {
     await this.goto(this.editAccountUrl.href, true);
-    const input = await this.waitForElement("#pepWebsite");
+    const input = await this.getWebsiteElement();
     return String(await input.value);
   }
 
   async getName(): Promise<Profile["name"]> {
     await this.goto(this.editAccountUrl.href, true);
-    const input = await this.waitForElement("#pepName");
+    const input = await this.getNameElement();
     return String(await input.value);
   }
 
@@ -196,6 +201,44 @@ export default class IGBot {
 
   getPassword(): Profile["password"] {
     return this.password;
+  }
+
+  //
+  // Get Profile Elements Methods
+  //
+
+  async getChainingElement() {
+    const input = await this.waitForElement("#pepChainingEnabled input[type='checkbox']");
+    const element = await this.waitForElement("#pepChainingEnabled label div");
+
+    return {
+      input,
+      element,
+    };
+  }
+
+  async getGenderElement() {
+    return await this.waitForElement("#pepGender");
+  }
+
+  async getPhoneNoElement() {
+    return await this.waitForElement("[id='pepPhone Number']");
+  }
+
+  async getEmailElement() {
+    return await this.waitForElement("#pepEmail");
+  }
+
+  async getBioElement() {
+    return await this.waitForElement("#pepBio");
+  }
+
+  async getWebsiteElement() {
+    return await this.waitForElement("#pepWebsite");
+  }
+
+  async getNameElement() {
+    return await this.waitForElement("#pepName");
   }
 
   /**
@@ -547,11 +590,21 @@ export default class IGBot {
   }
 
   @needsInit()
-  protected async goto(url: string, skipIfAlreadyOnUrl = false, waitForStatus?: LoadStatus) {
-    if (skipIfAlreadyOnUrl && (await this.hero.url) === url) return;
+  protected async goto(href: string, skipIfAlreadyOnUrl = false, waitForStatus?: LoadStatus) {
+    const url = useValidURL(href);
+    if (!url) throw new Error(`'goto' requires a valid URL, '${url}' is not valid.`);
 
-    console.log(`Navigating to '${url}'.`);
-    await this.hero.goto(url);
+    const currUrl = new URL(await this.hero.url);
+    if (
+      skipIfAlreadyOnUrl &&
+      (currUrl.href === url.href ||
+        (currUrl.href.endsWith("/") &&
+          currUrl.href.substring(0, currUrl.href.length - 1) === url.href))
+    )
+      return;
+
+    console.log(`Navigating to '${url.href}'.`);
+    await this.hero.goto(url.href);
     console.log("Navigated, waiting for page to load.");
     try {
       await this.waitForLoad(waitForStatus);
@@ -560,7 +613,7 @@ export default class IGBot {
       console.log("waitForLoad Error (can ignore):", error);
       await this.hero.waitForMillis(2e3);
     }
-    console.log(`Opened '${url}'.`);
+    console.log(`Opened '${url.href}'.`);
   }
 
   /**
