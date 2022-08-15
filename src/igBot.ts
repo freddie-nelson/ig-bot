@@ -9,6 +9,14 @@ import { useValidatePath } from "./utils/useValidatePath";
 import { useValidInstagramMedia } from "./utils/useValidInstagramMedia";
 import { useValidURL } from "./utils/useValidURL";
 
+export interface PostOptions {
+  caption?: string;
+  location?: string;
+  altText?: string;
+  hideLikesAndViews?: boolean;
+  disableComments?: boolean;
+}
+
 export function createFlagDecorator(propertyGetter: string, errorMsg: string) {
   return () => {
     return (target: any, key: string, descriptor: PropertyDescriptor) => {
@@ -470,11 +478,11 @@ export default class IGBot {
   @needsInit()
   @needsLogin()
   @makesBusy()
-  async post(content: string | string[], caption = "") {
+  async post(content: string | string[], options: PostOptions = {}) {
     console.log(
       `Posting ${
         Array.isArray(content) ? `[${content.map((p) => `'${p}'`).join(", ")}]` : `'${content}'`
-      } with caption '${caption}'.`,
+      } with caption '${options.caption}'.`,
     );
 
     await this.goto(this.baseInstagramUrl.href);
@@ -517,9 +525,70 @@ export default class IGBot {
     }
 
     // enter caption
-    const captionInput = await this.waitForElement("textarea[aria-label='Write a caption...']");
-    await this.hero.click(captionInput);
-    await this.hero.type(caption);
+    if (options.caption) {
+      const captionInput = await this.waitForElement("textarea[aria-label='Write a caption...']");
+      await this.hero.click(captionInput);
+      await this.hero.type(options.caption);
+    }
+
+    // enter location
+    if (options.location) {
+      const locationInput = await this.waitForElement("input[name='creation-location-input']");
+      await this.hero.click(locationInput);
+      await this.hero.type(options.location);
+
+      // location result
+      const topResultSpan = await this.waitForElement(
+        "div[aria-hidden='false'] button div span",
+        60e3,
+      ).catch(() => null);
+      if (!topResultSpan) throw new Error(`Invalid location, '${options.location}'.`);
+
+      await this.hero.click(topResultSpan);
+    }
+
+    // enter alt text
+    if (options.altText) {
+      const accessibilityAccordion = await this.waitForElementWithText(
+        "div[role='button'] > div",
+        "Accessibility",
+      );
+      await this.hero.click(accessibilityAccordion);
+
+      const altTextInput = await this.waitForElement("input[placeholder='Write alt text...']");
+      await this.hero.click(altTextInput);
+      await this.hero.type(options.altText);
+
+      await this.hero.click(accessibilityAccordion);
+    }
+
+    // open advanced settings accordion
+    if (options.hideLikesAndViews || options.disableComments) {
+      const advancedSettingsAccordion = await this.waitForElementWithText(
+        "div[role='button'] > div",
+        "Advanced Settings",
+      );
+      await this.hero.click(advancedSettingsAccordion);
+    }
+
+    // hide likes and views
+    if (options.hideLikesAndViews) {
+      const title = await this.waitForElementWithText(
+        "div > div > div",
+        "Hide like and view counts on this post",
+      );
+      const toggle = await title.parentElement.querySelector("label");
+
+      await this.hero.click(toggle);
+    }
+
+    // disable comments
+    if (options.disableComments) {
+      const title = await this.waitForElementWithText("div > div > div", "Turn off commenting");
+      const toggle = await title.parentElement.querySelector("label");
+
+      await this.hero.click(toggle);
+    }
 
     // share post
     const shareButton = await this.waitForElementWithText("button", "share");
