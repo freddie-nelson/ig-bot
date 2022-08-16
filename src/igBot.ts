@@ -149,6 +149,8 @@ export default class IGBot {
   //
 
   async setProfile(profile: Partial<Profile> & { customGender?: string }) {
+    console.log(`Setting ${Object.keys(profile).join(", ")} of profile.`);
+
     await this.goto(this.editAccountUrl.href);
 
     if (profile.chaining) await this.setChaining(profile.chaining);
@@ -163,9 +165,12 @@ export default class IGBot {
     if (profile.name) await this.setName(profile.name);
     if (profile.username) await this.setUsername(profile.username);
     if (profile.password) await this.setPassword(profile.password);
+
+    console.log("Profile updated.");
   }
 
   async setChaining(chaining: Profile["chaining"]) {
+    console.log(`Setting profile chaining to ${chaining}.`);
     await this.goto(this.editAccountUrl.href, true);
 
     const { element, input } = await this.getChainingElement();
@@ -173,6 +178,8 @@ export default class IGBot {
       await this.hero.click(element);
       await this.saveProfileChanges(`Could not set chaining to '${chaining}', try again.`);
     }
+
+    console.log("Profile chaining updated.");
   }
 
   async setGender(
@@ -183,6 +190,8 @@ export default class IGBot {
   async setGender(gender: ProfileGender, customGender?: string) {
     if (gender === ProfileGender.CUSTOM && !customGender)
       throw new Error(`Custom gender is being set but no custom gender was provided.`);
+
+    console.log(`Setting gender to ${gender === ProfileGender.CUSTOM ? customGender : gender}.`);
 
     await this.goto(this.editAccountUrl.href, true);
 
@@ -215,9 +224,13 @@ export default class IGBot {
     const doneButton = await this.waitForElementWithText("div[role='dialog'] button", "Done");
     await this.hero.click(doneButton);
     await this.waitForNoElement("div[role='dialog']");
+
+    console.log("Profile gender updated.");
   }
 
   async setPhoneNo(phoneNo: Profile["phoneNo"]) {
+    console.log(`Setting profile phone number to ${phoneNo}.`);
+
     await this.goto(this.editAccountUrl.href, true);
 
     const input = await this.getPhoneNoElement();
@@ -228,10 +241,14 @@ export default class IGBot {
     await this.saveProfileChanges(
       `Could not set phone number to '${phoneNo}', check the provided phone number is valid and try again.`,
     );
+
+    console.log("Profile phone number updated.");
   }
 
   async setEmail(email: Profile["email"]) {
     if (!useValidateEmail(email)) throw new Error("Invalid email address.");
+
+    console.log(`Setting profile email to ${email}.`);
 
     await this.goto(this.editAccountUrl.href, true);
 
@@ -243,10 +260,14 @@ export default class IGBot {
     await this.saveProfileChanges(
       `Could not set email to '${email}', check the provided email is valid and try again.`,
     );
+
+    console.log("Profile email updated.");
   }
 
   async setBio(bio: Profile["bio"]) {
     if (bio.length > 150) throw new Error("Bio cannot be longer than 150 characters.");
+
+    console.log(`Setting profile bio to ${bio}.`);
 
     await this.goto(this.editAccountUrl.href, true);
 
@@ -258,10 +279,14 @@ export default class IGBot {
     await this.saveProfileChanges(
       `Could not set bio to '${bio}', check the provided bio is valid and try again.`,
     );
+
+    console.log("Profile bio updated.");
   }
 
   async setWebsite(url: Profile["website"]) {
     if (!useValidURL(url)) throw new Error("Invalid url.");
+
+    console.log(`Setting profile website to ${url}.`);
 
     await this.goto(this.editAccountUrl.href, true);
 
@@ -273,10 +298,14 @@ export default class IGBot {
     await this.saveProfileChanges(
       `Could not set website to '${url}', check the provided url is valid and try again.`,
     );
+
+    console.log("Profile website updated.");
   }
 
   async setName(name: Profile["name"]) {
     if (name.length >= 64) throw new Error("Name must be less than 64 characters.");
+
+    console.log(`Setting profile name to ${name}.`);
 
     await this.goto(this.editAccountUrl.href, true);
 
@@ -288,6 +317,8 @@ export default class IGBot {
     await this.saveProfileChanges(
       `Could not set name to '${name}', check the provided name is valid and try again.`,
     );
+
+    console.log("Profile name updated.");
   }
 
   async setUsername(username: Profile["username"]) {
@@ -297,6 +328,8 @@ export default class IGBot {
       throw new Error(
         "Username can only contain alphanumeric characters, underscores and periods.",
       );
+
+    console.log(`Setting username to ${username}.`);
 
     await this.goto(this.editAccountUrl.href, true);
 
@@ -310,11 +343,15 @@ export default class IGBot {
     );
 
     this.username = username;
+
+    console.log("Username updated.");
   }
 
   async setPassword(password: Profile["password"]) {
     if (!password) throw new Error("Password cannot be empty.");
     if (password.length < 6) throw new Error("Password must be at least 6 characters.");
+
+    console.log(`Setting password to ${password}.`);
 
     await this.goto(this.changePasswordUrl.href);
 
@@ -341,11 +378,18 @@ export default class IGBot {
       );
 
     this.password = password;
+
+    console.log("Password updated.");
   }
 
   async saveProfileChanges(errorMsg: string) {
+    console.log("Saving profile changes.");
+
     const submitButton = await this.waitForElementWithText("button", "Submit");
-    if (await submitButton.disabled) return;
+    if (await submitButton.disabled) {
+      console.log("No changes to save.");
+      return;
+    }
 
     await this.hero.click(submitButton);
 
@@ -354,6 +398,8 @@ export default class IGBot {
       throw new Error(`${errorMsg}\nInstagram Error: ${await toastText.textContent}`);
 
     await this.hero.waitForMillis(1e3);
+
+    console.log("Profile changes saved.");
   }
 
   //
@@ -361,6 +407,8 @@ export default class IGBot {
   //
 
   async getProfile(): Promise<Profile> {
+    console.log("Getting profile details.");
+
     await this.goto(this.editAccountUrl.href, true);
 
     return {
@@ -377,42 +425,56 @@ export default class IGBot {
   }
 
   async getChaining(): Promise<Profile["chaining"]> {
+    console.log("Getting profile chaining.");
+
     await this.goto(this.editAccountUrl.href, true);
     const { input } = await this.getChainingElement();
     return await input.checked;
   }
 
   async getGender(): Promise<Profile["gender"]> {
+    console.log("Getting profile gender.");
+
     await this.goto(this.editAccountUrl.href, true);
     const input = await this.getGenderElement();
     return <Profile["gender"]>String(await input.value);
   }
 
   async getPhoneNo(): Promise<Profile["phoneNo"]> {
+    console.log("Getting profile phone number.");
+
     await this.goto(this.editAccountUrl.href, true);
     const input = await this.getPhoneNoElement();
     return String(await input.value);
   }
 
   async getEmail(): Promise<Profile["email"]> {
+    console.log("Getting profile email.");
+
     await this.goto(this.editAccountUrl.href, true);
     const input = await this.getEmailElement();
     return String(await input.value);
   }
 
   async getBio(): Promise<Profile["bio"]> {
+    console.log("Getting profile bio.");
+
     await this.goto(this.editAccountUrl.href, true);
     const textarea = await this.getBioElement();
     return String(await textarea.value);
   }
 
   async getWebsite(): Promise<Profile["website"]> {
+    console.log("Getting profile website.");
+
     await this.goto(this.editAccountUrl.href, true);
     const input = await this.getWebsiteElement();
     return String(await input.value);
   }
 
   async getName(): Promise<Profile["name"]> {
+    console.log("Getting profile name.");
+
     await this.goto(this.editAccountUrl.href, true);
     const input = await this.getNameElement();
     return String(await input.value);
