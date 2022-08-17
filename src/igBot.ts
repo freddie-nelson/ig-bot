@@ -138,20 +138,36 @@ export default class IGBot {
     await this.acceptCookieConsent();
   }
 
+  /**
+   * Close the instagram client.
+   *
+   * The client will need to be reinitialized before it can be used again.
+   */
   @needsInit()
   async close() {
     await this.hero.close();
     await this.core.close();
+
+    this.isInitialised = false;
+    this.isLoggedIn = false;
+    this.isBusy = false;
   }
 
   //
   // Set Profile Details Methods
   //
 
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
   async setProfile(profile: Partial<Profile> & { customGender?: string }) {
     console.log(`Setting ${Object.keys(profile).join(", ")} of profile.`);
 
     await this.goto(this.editAccountUrl.href);
+
+    // make free so that set methods can run
+    this.isBusy = false;
 
     if (profile.chaining) await this.setChaining(profile.chaining);
     if (profile.gender && profile.gender !== ProfileGender.CUSTOM)
@@ -169,6 +185,10 @@ export default class IGBot {
     console.log("Profile updated.");
   }
 
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
   async setChaining(chaining: Profile["chaining"]) {
     console.log(`Setting profile chaining to ${chaining}.`);
     await this.goto(this.editAccountUrl.href, true);
@@ -187,6 +207,10 @@ export default class IGBot {
   ): Promise<void>;
   async setGender(gender: ProfileGender.CUSTOM, customGender: string): Promise<void>;
 
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
   async setGender(gender: ProfileGender, customGender?: string) {
     if (gender === ProfileGender.CUSTOM && !customGender)
       throw new Error(`Custom gender is being set but no custom gender was provided.`);
@@ -228,6 +252,10 @@ export default class IGBot {
     console.log("Profile gender updated.");
   }
 
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
   async setPhoneNo(phoneNo: Profile["phoneNo"]) {
     console.log(`Setting profile phone number to ${phoneNo}.`);
 
@@ -245,6 +273,10 @@ export default class IGBot {
     console.log("Profile phone number updated.");
   }
 
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
   async setEmail(email: Profile["email"]) {
     if (!useValidateEmail(email)) throw new Error("Invalid email address.");
 
@@ -264,6 +296,10 @@ export default class IGBot {
     console.log("Profile email updated.");
   }
 
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
   async setBio(bio: Profile["bio"]) {
     if (bio.length > 150) throw new Error("Bio cannot be longer than 150 characters.");
 
@@ -283,6 +319,10 @@ export default class IGBot {
     console.log("Profile bio updated.");
   }
 
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
   async setWebsite(url: Profile["website"]) {
     if (!useValidURL(url)) throw new Error("Invalid url.");
 
@@ -302,6 +342,10 @@ export default class IGBot {
     console.log("Profile website updated.");
   }
 
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
   async setName(name: Profile["name"]) {
     if (name.length >= 64) throw new Error("Name must be less than 64 characters.");
 
@@ -321,6 +365,10 @@ export default class IGBot {
     console.log("Profile name updated.");
   }
 
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
   async setUsername(username: Profile["username"]) {
     if (!username) throw new Error("Username cannot be empty.");
     if (username.length >= 30) throw new Error("Username must be less than 30 characters.");
@@ -347,6 +395,10 @@ export default class IGBot {
     console.log("Username updated.");
   }
 
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
   async setPassword(password: Profile["password"]) {
     if (!password) throw new Error("Password cannot be empty.");
     if (password.length < 6) throw new Error("Password must be at least 6 characters.");
@@ -382,6 +434,9 @@ export default class IGBot {
     console.log("Password updated.");
   }
 
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
   async saveProfileChanges(errorMsg: string) {
     console.log("Saving profile changes.");
 
@@ -406,14 +461,19 @@ export default class IGBot {
   // Get Profile Details Methods
   //
 
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
   async getProfile(): Promise<Profile> {
     console.log("Getting profile details.");
 
     await this.goto(this.editAccountUrl.href, true);
 
+    // make free so that get methods can be used
+    this.isBusy = false;
+
     return {
-      username: this.getUsername(),
-      password: this.getPassword(),
       email: await this.getEmail(),
       name: await this.getName(),
       phoneNo: await this.getPhoneNo(),
@@ -421,9 +481,17 @@ export default class IGBot {
       bio: await this.getBio(),
       website: await this.getWebsite(),
       chaining: await this.getChaining(),
+
+      // at bottom as these don't makeBusy
+      username: this.getUsername(),
+      password: this.getPassword(),
     };
   }
 
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
   async getChaining(): Promise<Profile["chaining"]> {
     console.log("Getting profile chaining.");
 
@@ -432,6 +500,10 @@ export default class IGBot {
     return await input.checked;
   }
 
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
   async getGender(): Promise<Profile["gender"]> {
     console.log("Getting profile gender.");
 
@@ -440,6 +512,10 @@ export default class IGBot {
     return <Profile["gender"]>String(await input.value);
   }
 
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
   async getPhoneNo(): Promise<Profile["phoneNo"]> {
     console.log("Getting profile phone number.");
 
@@ -448,6 +524,10 @@ export default class IGBot {
     return String(await input.value);
   }
 
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
   async getEmail(): Promise<Profile["email"]> {
     console.log("Getting profile email.");
 
@@ -456,6 +536,10 @@ export default class IGBot {
     return String(await input.value);
   }
 
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
   async getBio(): Promise<Profile["bio"]> {
     console.log("Getting profile bio.");
 
@@ -464,6 +548,10 @@ export default class IGBot {
     return String(await textarea.value);
   }
 
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
   async getWebsite(): Promise<Profile["website"]> {
     console.log("Getting profile website.");
 
@@ -472,6 +560,10 @@ export default class IGBot {
     return String(await input.value);
   }
 
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
   async getName(): Promise<Profile["name"]> {
     console.log("Getting profile name.");
 
@@ -492,6 +584,9 @@ export default class IGBot {
   // Get Profile Elements Methods
   //
 
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
   async getChainingElement() {
     const input = await this.waitForElement("#pepChainingEnabled input[type='checkbox']");
     const element = await this.waitForElement("#pepChainingEnabled label div");
@@ -502,30 +597,50 @@ export default class IGBot {
     };
   }
 
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
   async getGenderElement() {
     return await this.waitForElement("#pepGender");
   }
 
+  @needsInit()
+  @needsLogin()
   async getPhoneNoElement() {
     return await this.waitForElement("[id='pepPhone Number']");
   }
 
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
   async getEmailElement() {
     return await this.waitForElement("#pepEmail");
   }
 
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
   async getBioElement() {
     return await this.waitForElement("#pepBio");
   }
 
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
   async getWebsiteElement() {
     return await this.waitForElement("#pepWebsite");
   }
 
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
   async getNameElement() {
     return await this.waitForElement("#pepName");
   }
 
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
   async getUsernameElement() {
     return await this.waitForElement("#pepUsername");
   }
