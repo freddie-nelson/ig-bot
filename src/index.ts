@@ -7,13 +7,14 @@ async function main() {
   const bot = new IGBot(process.env.INSTA_USERNAME, process.env.INSTA_PASSWORD, true);
   await bot.init();
   await bot.login();
-  await bot.post("../test-post-video-0.mp4", {
-    caption: "what an awesome funny meme video",
-    location: "Epic Games",
-    altText: "A funny wholesome video",
-    disableComments: true,
-    hideLikesAndViews: true,
-  });
+  console.log(await bot.getPosts(bot.getUsername(), 100));
+  // await bot.post("../test-post-video-0.mp4", {
+  //   caption: "what an awesome funny meme video",
+  //   location: "Epic Games",
+  //   altText: "A funny wholesome video",
+  //   disableComments: true,
+  //   hideLikesAndViews: true,
+  // });
   // for (let i = 0; i < 2; i++) {
   // await bot.post(
   //   ["../test-post-image-0.jpg", "../test-post-image-1.jfif", "../test-post-image-2.jpg"],
@@ -33,7 +34,7 @@ async function main() {
   //   website: "https://memerman.com",
   //   chaining: true,
   // });
-  console.log(await bot.getProfile());
+  // console.log(await bot.getProfile());
   // await bot.logout();
   await bot.close();
 }
