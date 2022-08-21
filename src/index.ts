@@ -4,10 +4,16 @@ import { ProfileGender } from "./profile";
 dotenv.config();
 
 async function main() {
-  const bot = new IGBot(process.env.INSTA_USERNAME, process.env.INSTA_PASSWORD, true);
+  const username = process.env.INSTA_USERNAME;
+  const password = process.env.INSTA_PASSWORD;
+
+  const bot = new IGBot(username, password, true);
   await bot.init();
   await bot.login();
-  console.log(await bot.getPosts(bot.getUsername(), 100));
+
+  console.log(await bot.getPosts("_brandontang_", 100));
+  console.log(await bot.getRecentPost("_brandontang_"));
+  console.log(await bot.getPinnedPosts("_brandontang_"));
   // await bot.post("../test-post-video-0.mp4", {
   //   caption: "what an awesome funny meme video",
   //   location: "Epic Games",

@@ -2,6 +2,7 @@ import Hero, { ISuperElement, ISuperHTMLElement, KeyboardKey, LoadStatus } from 
 import { ITypeInteraction } from "@ulixee/hero/interfaces/IInteractions";
 import Server from "@ulixee/server";
 import { Z_PARTIAL_FLUSH } from "zlib";
+import { PostDetail } from "./post";
 import { Profile, ProfileGender } from "./profile";
 import { useAbsolutePath } from "./utils/useAbsolutePath";
 import { useEscapeRegex } from "./utils/useEscapeRegex";
@@ -161,17 +162,47 @@ export default class IGBot {
   //
 
   /**
+   * Gets a user's pinned posts.
+   *
+   * @param username The username of the user to get posts from.
+   * @param count The number of posts to get. @default Infinity
+   *
+   * @returns An array of {@link PostDetail} objects for each pinned post.
+   */
+  getPinnedPosts(username: string, count = Infinity) {
+    return this.getPosts(username, count, false, true);
+  }
+
+  /**
+   * Gets a user's most recent post.
+   *
+   * This method does not include pinned posts in it's search.
+   *
+   * @param username
+   *
+   * @returns The user's most recent post, if it exists.
+   */
+  getRecentPost(username: string) {
+    return this.getPosts(username, 1).then((posts) => posts[0]);
+  }
+
+  /**
    * Gets a user's posts.
    *
-   * @param username The username of the user to get posts from. @default `this.username`
-   * @param count The number of posts to get. @default 10
-   * @returns An array of links to each post.
+   * By default, this method does not include pinned posts in it's search.
+   *
+   * @param username The username of the user to get posts from.
+   * @param count The maxium number of posts to get, `Infinity` will get all posts.
+   * @param filterPinned Whether to filter out pinned posts. @default true
+   * @param onlyPinned Whether to only get pinned posts. @default false
+   *
+   * @returns An array of {@link PostDetail} objects for each post.
    */
   @needsFree()
   @needsInit()
   @needsLogin()
   @makesBusy()
-  async getPosts(username = this.username, count = 10) {
+  async getPosts(username: string, count: number, filterPinned = true, onlyPinned = false) {
     console.log(`Getting ${count} posts by '${username}'.`);
 
     await this.goto(this.getHref(`/${username}`));
@@ -181,13 +212,14 @@ export default class IGBot {
       throw new Error(`User '${username}' does not exist.`);
     }
 
-    const allPostLinks: string[] = [];
-    let lastPostRead = ""; // this acts as 'cursor' for infinite scroll pagination
+    const allPosts: PostDetail[] = [];
+    let lastPostRead: PostDetail; // this acts as 'cursor' for infinite scroll pagination
     let rowElementHeight = 0;
     let currentScrollY = 0;
+    let noMorePinned = false;
 
     console.log("Finding post elements and extracting links.");
-    while (allPostLinks.length < count) {
+    while (allPosts.length < count) {
       // if this isn't first time reading posts, scroll for more posts
       if (lastPostRead) {
         currentScrollY += rowElementHeight * 4;
@@ -212,32 +244,56 @@ export default class IGBot {
         postElements.push(...Array.from(await r.children));
       }
 
-      // add post links
-      const postLinks: string[] = [];
+      // add posts
+      const posts: PostDetail[] = [];
+
       for (const p of postElements) {
         const link = await p.querySelector("a");
-        if (link) {
-          postLinks.push(await link.getAttribute("href"));
+        if (!link) continue;
+
+        // filter out pinned posts if necessary
+        const isPinned = (await p.querySelector("[aria-label='Pinned post icon']")) !== null;
+        if (filterPinned && isPinned) continue;
+
+        // exit if we've reached the end of pinned posts
+        // (if we're only getting pinned posts)
+        if (onlyPinned && !isPinned) {
+          noMorePinned = true; // set flag to exit outer loop
+          break;
         }
+
+        // add post to current posts list
+        const url = this.getHref(await link.getAttribute("href"));
+        posts.push({
+          id: url.split("/p/").pop().slice(0, -1),
+          url,
+          isPinned,
+        });
       }
 
       // remove already read posts
       if (lastPostRead) {
-        postLinks.splice(postLinks.indexOf(lastPostRead));
+        posts.splice(posts.indexOf(lastPostRead));
       }
 
       // we have reached the end of the user's posts
-      if (postLinks.length === 0) {
-        break;
-      }
+      if (posts.length === 0) break;
 
-      lastPostRead = postLinks[postLinks.length - 1];
-      allPostLinks.push(...postLinks);
+      lastPostRead = posts[posts.length - 1];
+      allPosts.push(...posts);
 
-      console.log(`Found ${Math.min(count, allPostLinks.length)} / ${count} posts.`);
+      console.log(`Found ${Math.min(count, allPosts.length)} / ${count} posts.`);
+
+      // we have reached the end of the user's pinned posts
+      // this means that onlyPinned is also true
+      // so we exit here and return posts, which will only be pinned posts
+      if (noMorePinned) break;
     }
 
-    return allPostLinks.slice(0, count);
+    // limit posts to count
+    allPosts.length = Math.min(count, allPosts.length);
+
+    return allPosts;
   }
 
   /**
