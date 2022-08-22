@@ -11,9 +11,10 @@ async function main() {
   await bot.init();
   await bot.login();
 
-  console.log(await bot.getPosts("_brandontang_", 100));
-  console.log(await bot.getRecentPost("_brandontang_"));
-  console.log(await bot.getPinnedPosts("_brandontang_"));
+  // console.log(await bot.getPosts("_brandontang_", 100));
+  const recentPost = await bot.getRecentPost("_brandontang_");
+  console.log(await bot.getPost(recentPost.id));
+  // console.log(await bot.getPinnedPosts("_brandontang_"));
   // await bot.post("../test-post-video-0.mp4", {
   //   caption: "what an awesome funny meme video",
   //   location: "Epic Games",

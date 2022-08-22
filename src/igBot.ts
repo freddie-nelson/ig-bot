@@ -1,8 +1,7 @@
-import Hero, { ISuperElement, ISuperHTMLElement, KeyboardKey, LoadStatus } from "@ulixee/hero";
+import Hero, { ISuperHTMLElement, KeyboardKey, LoadStatus } from "@ulixee/hero";
 import { ITypeInteraction } from "@ulixee/hero/interfaces/IInteractions";
 import Server from "@ulixee/server";
-import { Z_PARTIAL_FLUSH } from "zlib";
-import { PostDetail } from "./post";
+import { Post, PostId } from "./post";
 import { Profile, ProfileGender } from "./profile";
 import { useAbsolutePath } from "./utils/useAbsolutePath";
 import { useEscapeRegex } from "./utils/useEscapeRegex";
@@ -162,12 +161,101 @@ export default class IGBot {
   //
 
   /**
+   * Gets detailed information about a post.
+   *
+   * @param postId A {@link PostId} object to get the post for.
+   */
+  async getPost(identifier: PostId): Promise<Post>;
+
+  /**
+   * Gets detailed information about a post.
+   *
+   * @param identifier The id or url of the post to get.
+   */
+  async getPost(identifier: string): Promise<Post>;
+
+  /**
+   * Gets detailed information about a post.
+   */
+  async getPost(identifier: PostId | string): Promise<Post> {
+    // validate id
+    let id = "";
+    const idRegex = /^([a-zA-Z0-9_-]+)$/;
+
+    if (typeof identifier === "string") {
+      const postUrlRegex = /^(https?:\/\/)?(www\.)?instagram\.com\/p\/([a-zA-Z0-9_-]+)\/?$/;
+
+      if (postUrlRegex.test(identifier)) {
+        id = identifier.match(postUrlRegex)[3];
+      } else if (idRegex.test(identifier)) {
+        id = identifier;
+      } else {
+        throw new Error("Invalid post identifier.");
+      }
+    } else if (idRegex.test(identifier.id)) {
+      id = identifier.id;
+    } else {
+      throw new Error("Invalid post identifier.");
+    }
+
+    const url = this.getHref(`/p/${id}/`);
+
+    // get post info
+    console.log("Getting post info.");
+    await this.goto(url);
+
+    const aside = await this.waitForElement(
+      "article[role='presentation'] div[role='presentation']",
+    );
+
+    // get username
+    const header = await aside.querySelector("header");
+    const profilePic = await header.querySelector("img"); // username is stored in alt attribute of profile pic
+
+    // username is first word in alt text and is followed by "'s", so we can split on "'s "
+    const username = await (await profilePic.getAttribute("alt")).split("'s ")[0];
+    if (!username) throw new Error("Could not get username.");
+
+    // get caption
+    const description = String(
+      await (
+        await this.waitForElement("meta[property='og:title']")
+      ).content,
+    );
+
+    const startOfCaption = description.indexOf('Instagram: "') + 'Instagram: "'.length;
+    const caption = startOfCaption !== undefined ? description.slice(startOfCaption, -1) : "";
+
+    // get likes
+    const likesAnchorSelector = `a[href='/p/${id}/liked_by/']`;
+    const allLikesAnchors = await aside.querySelectorAll(likesAnchorSelector);
+
+    const isOtherLikes = (await allLikesAnchors.length) > 1;
+    const likesAnchor = isOtherLikes ? allLikesAnchors[1] : allLikesAnchors[0];
+
+    const likes =
+      Number(await (await likesAnchor.querySelector("span")?.textContent)?.replace(",", "")) +
+      (isOtherLikes ? 1 : 0);
+
+    return {
+      id,
+      url,
+      username,
+      caption,
+      likes,
+      media: "",
+      isVideo: false,
+      views: undefined,
+    };
+  }
+
+  /**
    * Gets a user's pinned posts.
    *
    * @param username The username of the user to get posts from.
    * @param count The number of posts to get. @default Infinity
    *
-   * @returns An array of {@link PostDetail} objects for each pinned post.
+   * @returns An array of {@link PostId} objects for each pinned post.
    */
   getPinnedPosts(username: string, count = Infinity) {
     return this.getPosts(username, count, false, true);
@@ -196,13 +284,18 @@ export default class IGBot {
    * @param filterPinned Whether to filter out pinned posts. @default true
    * @param onlyPinned Whether to only get pinned posts. @default false
    *
-   * @returns An array of {@link PostDetail} objects for each post.
+   * @returns An array of {@link PostId} objects for each post.
    */
   @needsFree()
   @needsInit()
   @needsLogin()
   @makesBusy()
-  async getPosts(username: string, count: number, filterPinned = true, onlyPinned = false) {
+  async getPosts(
+    username: string,
+    count: number,
+    filterPinned = true,
+    onlyPinned = false,
+  ): Promise<PostId[]> {
     console.log(`Getting ${count} posts by '${username}'.`);
 
     await this.goto(this.getHref(`/${username}`));
@@ -212,8 +305,8 @@ export default class IGBot {
       throw new Error(`User '${username}' does not exist.`);
     }
 
-    const allPosts: PostDetail[] = [];
-    let lastPostRead: PostDetail; // this acts as 'cursor' for infinite scroll pagination
+    const allPosts: PostId[] = [];
+    let lastPostRead: PostId; // this acts as 'cursor' for infinite scroll pagination
     let rowElementHeight = 0;
     let currentScrollY = 0;
     let noMorePinned = false;
@@ -245,7 +338,7 @@ export default class IGBot {
       }
 
       // add posts
-      const posts: PostDetail[] = [];
+      const posts: PostId[] = [];
 
       for (const p of postElements) {
         const link = await p.querySelector("a");
