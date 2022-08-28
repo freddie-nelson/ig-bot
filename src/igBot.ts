@@ -232,10 +232,12 @@ export default class IGBot {
 
     const isOtherLikes = (await allLikesAnchors.length) > 1;
     const likesAnchor = isOtherLikes ? allLikesAnchors[1] : allLikesAnchors[0];
+    const likesElement = await likesAnchor.querySelector("span");
 
-    const likes =
-      Number(await (await likesAnchor.querySelector("span")?.textContent)?.replace(",", "")) +
-      (isOtherLikes ? 1 : 0);
+    let likes = undefined;
+    if (likesElement) {
+      likes = Number((await likesElement.textContent)?.replace(",", "")) + (isOtherLikes ? 1 : 0);
+    }
 
     return {
       id,

@@ -8,9 +8,9 @@ export interface Post {
   id: string;
   url: string;
   username: string;
-  likes: number;
   caption: string;
   media: string | string[];
+  likes?: number;
 
   isVideo: boolean;
   views?: number;
