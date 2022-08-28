@@ -202,53 +202,92 @@ export default class IGBot {
 
     // get post info
     console.log("Getting post info.");
+
     await this.goto(url);
 
-    const aside = await this.waitForElement(
-      "article[role='presentation'] div[role='presentation']",
-    );
+    // get post info from api request made by page
+    const info = await this.hero
+      .waitForResource({
+        url: /i.instagram.com\/api\/v1\/media\/(.*)\/info\//,
+        type: "XHR",
+      })
+      .then(async (resource) => (await resource.json).items[0]);
 
-    // get username
-    const header = await aside.querySelector("header");
-    const profilePic = await header.querySelector("img"); // username is stored in alt attribute of profile pic
+    const isVideo = info.media_type === 2;
+    const isSlideshow = !!info.carousel_media;
 
-    // username is first word in alt text and is followed by "'s", so we can split on "'s "
-    const username = await (await profilePic.getAttribute("alt")).split("'s ")[0];
-    if (!username) throw new Error("Could not get username.");
-
-    // get caption
-    const description = String(
-      await (
-        await this.waitForElement("meta[property='og:title']")
-      ).content,
-    );
-
-    const startOfCaption = description.indexOf('Instagram: "') + 'Instagram: "'.length;
-    const caption = startOfCaption !== undefined ? description.slice(startOfCaption, -1) : "";
-
-    // get likes
-    const likesAnchorSelector = `a[href='/p/${id}/liked_by/']`;
-    const allLikesAnchors = await aside.querySelectorAll(likesAnchorSelector);
-
-    const isOtherLikes = (await allLikesAnchors.length) > 1;
-    const likesAnchor = isOtherLikes ? allLikesAnchors[1] : allLikesAnchors[0];
-    const likesElement = await likesAnchor.querySelector("span");
-
-    let likes = undefined;
-    if (likesElement) {
-      likes = Number((await likesElement.textContent)?.replace(",", "")) + (isOtherLikes ? 1 : 0);
+    let media: Post["media"] = "";
+    if (isSlideshow) {
+      media = info.carousel_media.map((media: any) =>
+        media.media_type === 2
+          ? media.video_versions[0].url
+          : media.image_versions2.candidates[0].url,
+      );
+    } else if (isVideo) {
+      media = info.video_versions[0].url;
+    } else {
+      media = info.image_versions2.candidates[0].url;
     }
 
     return {
       id,
       url,
-      username,
-      caption,
-      likes,
-      media: "",
-      isVideo: false,
-      views: undefined,
+      username: info.user.username,
+      caption: info.caption.text,
+      likes: info.like_count,
+      isSlideshow,
+      isVideo,
+      media,
+      views: info?.view_count,
     };
+
+    // GET POST INFO FROM SCRAPING
+
+    // const aside = await this.waitForElement(
+    //   "article[role='presentation'] div[role='presentation']",
+    // );
+
+    // // get username
+    // const header = await aside.querySelector("header");
+    // const profilePic = await header.querySelector("img"); // username is stored in alt attribute of profile pic
+
+    // // username is first word in alt text and is followed by "'s", so we can split on "'s "
+    // const username = await (await profilePic.getAttribute("alt")).split("'s ")[0];
+    // if (!username) throw new Error("Could not get username.");
+
+    // // get caption
+    // const description = String(
+    //   await (
+    //     await this.waitForElement("meta[property='og:title']")
+    //   ).content,
+    // );
+
+    // const startOfCaption = description.indexOf('Instagram: "') + 'Instagram: "'.length;
+    // const caption = startOfCaption !== undefined ? description.slice(startOfCaption, -1) : "";
+
+    // // get likes
+    // const likesAnchorSelector = `a[href='/p/${id}/liked_by/']`;
+    // const allLikesAnchors = await aside.querySelectorAll(likesAnchorSelector);
+
+    // const isOtherLikes = (await allLikesAnchors.length) > 1;
+    // const likesAnchor = isOtherLikes ? allLikesAnchors[1] : allLikesAnchors[0];
+    // const likesElement = await likesAnchor.querySelector("span");
+
+    // let likes = undefined;
+    // if (likesElement) {
+    //   likes = Number((await likesElement.textContent)?.replace(",", "")) + (isOtherLikes ? 1 : 0);
+    // }
+
+    // return {
+    //   id,
+    //   url,
+    //   username,
+    //   caption,
+    //   likes,
+    //   media: "",
+    //   isVideo: false,
+    //   views: undefined,
+    // };
   }
 
   /**
