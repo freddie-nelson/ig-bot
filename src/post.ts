@@ -1,8 +1,13 @@
-export interface PostId {
+export interface PostInfo {
   id: string;
   url: string;
   isPinned: boolean;
 }
+
+/**
+ * The id, url or {@link PostId} of a post.
+ */
+export type PostIdentifer = string | PostInfo | Post;
 
 export interface Post {
   id: string;

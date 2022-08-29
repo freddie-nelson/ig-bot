@@ -1,10 +1,11 @@
 import Hero, { ISuperHTMLElement, KeyboardKey, LoadStatus } from "@ulixee/hero";
 import { ITypeInteraction } from "@ulixee/hero/interfaces/IInteractions";
 import Server from "@ulixee/server";
-import { Post, PostId } from "./post";
+import { Post, PostIdentifer, PostInfo } from "./post";
 import { Profile, ProfileGender } from "./profile";
 import { useAbsolutePath } from "./utils/useAbsolutePath";
 import { useEscapeRegex } from "./utils/useEscapeRegex";
+import { usePostIdentifierToId } from "./utils/usePostIdentifierToId";
 import { useSpreadNum } from "./utils/useSpreadNum";
 import { useValidateEmail } from "./utils/useValidateEmail";
 import { useValidatePath } from "./utils/useValidatePath";
@@ -161,47 +162,161 @@ export default class IGBot {
   //
 
   /**
-   * Gets detailed information about a post.
+   * Comments on a post.
    *
-   * @param postId A {@link PostId} object to get the post for.
+   * @param post The post to comment on.
    */
-  async getPost(identifier: PostId): Promise<Post>;
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
+  async commentPost(post: PostIdentifer, comment: string) {
+    const id = usePostIdentifierToId(post);
+    const url = this.getHref(`/p/${id}/`);
 
-  /**
-   * Gets detailed information about a post.
-   *
-   * @param identifier The id or url of the post to get.
-   */
-  async getPost(identifier: string): Promise<Post>;
+    console.log(`Commenting on post '${id}'.`);
 
-  /**
-   * Gets detailed information about a post.
-   */
-  async getPost(identifier: PostId | string): Promise<Post> {
-    // validate id
-    let id = "";
-    const idRegex = /^([a-zA-Z0-9_-]+)$/;
+    await this.goto(url, true);
 
-    if (typeof identifier === "string") {
-      const postUrlRegex = /^(https?:\/\/)?(www\.)?instagram\.com\/p\/([a-zA-Z0-9_-]+)\/?$/;
+    // type comment
+    const commentInput = await this.waitForElement("textarea[placeholder='Add a comment…']");
+    await this.hero.click(commentInput);
+    await this.clearInput();
 
-      if (postUrlRegex.test(identifier)) {
-        id = identifier.match(postUrlRegex)[3];
-      } else if (idRegex.test(identifier)) {
-        id = identifier;
-      } else {
-        throw new Error("Invalid post identifier.");
+    // type comment, while replacing newlines with Shift+Enter
+    const lines = comment.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      await this.hero.type(lines[i]);
+
+      if (i < lines.length - 1) {
+        await this.hero.interact({ keyDown: KeyboardKey.Shift }, { keyPress: KeyboardKey.Enter });
+        await this.hero.interact({ keyUp: KeyboardKey.Shift });
+        await this.hero.waitForMillis(200);
       }
-    } else if (idRegex.test(identifier.id)) {
-      id = identifier.id;
-    } else {
-      throw new Error("Invalid post identifier.");
     }
 
+    // submit comment
+    await this.hero.interact({ keyPress: KeyboardKey.Enter });
+
+    // wait for comment to be posted
+    await this.waitForElement("[aria-label='Loading...']").catch(() => null);
+    await this.waitForNoElement("[aria-label='Loading...']", 60e3);
+
+    // check for error
+    const toastMessage = await this.getMessageToast();
+    if (toastMessage) {
+      throw new Error(
+        `Failed to comment '${comment}' on post '${url}'.\nInstagramError: ${await toastMessage.textContent}`,
+      );
+    }
+
+    console.log(`Commented '${comment}' on post '${id}'.`);
+  }
+
+  /**
+   * Unlikes a post.
+   *
+   * @param post The post to unlike.
+   */
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
+  async unlikePost(post: PostIdentifer) {
+    const id = usePostIdentifierToId(post);
+    const url = this.getHref(`/p/${id}/`);
+
+    console.log(`Unliking post '${id}'.`);
+
+    await this.goto(url, true);
+
+    this.isBusy = false;
+    if (!(await this.isPostLiked(post))) return;
+    this.isBusy = true;
+
+    // click unlike button
+    const unlikeButtonIcon = await this.waitForElement("[aria-label='Unlike']");
+    const unlikeButton = await unlikeButtonIcon.parentElement.parentElement;
+    await this.hero.click(unlikeButton);
+
+    // wait for response from server
+    await this.hero.waitForResource({
+      url: /instagram.com\/web\/likes\/(.*)\/unlike\//,
+      type: "XHR",
+    });
+
+    console.log(`Unliked post '${id}'.`);
+  }
+
+  /**
+   * Likes a post.
+   *
+   * @param post The identifier of the post to like.
+   */
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
+  async likePost(post: PostIdentifer) {
+    const id = usePostIdentifierToId(post);
+    const url = this.getHref(`/p/${id}/`);
+
+    console.log(`Liking post '${id}'.`);
+
+    await this.goto(url, true);
+
+    this.isBusy = false;
+    if (await this.isPostLiked(post)) return;
+    this.isBusy = true;
+
+    // click the like button
+    const likeButtonIcon = await this.waitForElement("[aria-label='Like']");
+    const likeButton = await likeButtonIcon.parentElement.parentElement;
+    await this.hero.click(likeButton);
+
+    // wait for response from server
+    await this.hero.waitForResource({
+      url: /instagram.com\/web\/likes\/(.*)\/like\//,
+      type: "XHR",
+    });
+
+    console.log(`Liked post '${id}'.`);
+  }
+
+  /**
+   * Gets whether a post is liked by the currently logged in user.
+   *
+   * @param post The identifier of the post.
+   * @returns Whether the post is liked.
+   */
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
+  async isPostLiked(post: PostIdentifer) {
+    const id = usePostIdentifierToId(post);
+    const url = this.getHref(`/p/${id}/`);
+
+    await this.goto(url, true);
+
+    return (await this.waitForElement("[aria-label='Like']")) === null;
+  }
+
+  /**
+   * Gets detailed information about a post.
+   *
+   * @param identifier The identifier of the post to get.
+   */
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
+  async getPost(identifier: PostIdentifer): Promise<Post> {
+    const id = usePostIdentifierToId(identifier);
     const url = this.getHref(`/p/${id}/`);
 
     // get post info
-    console.log("Getting post info.");
+    console.log(`Getting post info for post '${id}'.`);
 
     await this.goto(url);
 
@@ -228,6 +343,8 @@ export default class IGBot {
     } else {
       media = info.image_versions2.candidates[0].url;
     }
+
+    console.log("Got post info.");
 
     return {
       id,
@@ -296,7 +413,7 @@ export default class IGBot {
    * @param username The username of the user to get posts from.
    * @param count The number of posts to get. @default Infinity
    *
-   * @returns An array of {@link PostId} objects for each pinned post.
+   * @returns An array of {@link PostInfo} objects for each pinned post.
    */
   getPinnedPosts(username: string, count = Infinity) {
     return this.getPosts(username, count, false, true);
@@ -325,7 +442,7 @@ export default class IGBot {
    * @param filterPinned Whether to filter out pinned posts. @default true
    * @param onlyPinned Whether to only get pinned posts. @default false
    *
-   * @returns An array of {@link PostId} objects for each post.
+   * @returns An array of {@link PostInfo} objects for each post.
    */
   @needsFree()
   @needsInit()
@@ -336,7 +453,7 @@ export default class IGBot {
     count: number,
     filterPinned = true,
     onlyPinned = false,
-  ): Promise<PostId[]> {
+  ): Promise<PostInfo[]> {
     console.log(`Getting ${count} posts by '${username}'.`);
 
     await this.goto(this.getHref(`/${username}`));
@@ -346,8 +463,8 @@ export default class IGBot {
       throw new Error(`User '${username}' does not exist.`);
     }
 
-    const allPosts: PostId[] = [];
-    let lastPostRead: PostId; // this acts as 'cursor' for infinite scroll pagination
+    const allPosts: PostInfo[] = [];
+    let lastPostRead: PostInfo; // this acts as 'cursor' for infinite scroll pagination
     let rowElementHeight = 0;
     let currentScrollY = 0;
     let noMorePinned = false;
@@ -379,7 +496,7 @@ export default class IGBot {
       }
 
       // add posts
-      const posts: PostId[] = [];
+      const posts: PostInfo[] = [];
 
       for (const p of postElements) {
         const link = await p.querySelector("a");
@@ -605,7 +722,7 @@ export default class IGBot {
     const errorMsg = await this.querySelector("[role='alert']");
     if (errorMsg) {
       console.log("Failed to login, you may want to check your username and password.");
-      console.log(`Instagram Error: ${await errorMsg.textContent}`);
+      console.log(`InstagramError: ${await errorMsg.textContent}`);
       throw new Error("Failed to login.");
     }
 
@@ -907,10 +1024,10 @@ export default class IGBot {
     const changePasswordButton = await this.waitForElementWithText("button", "Change Password");
     await this.hero.click(changePasswordButton);
 
-    const toastText = await this.waitForElement("div > div > div > div > div > p");
-    if ((await toastText.textContent) !== "Password changed.")
+    const toastMessage = await this.getMessageToast();
+    if ((await toastMessage?.textContent) !== "Password changed.")
       throw new Error(
-        `Could not set password to '${password}', check the provided password is valid and try again.\nInstagram Error: ${await toastText.textContent}`,
+        `Could not set password to '${password}', check the provided password is valid and try again.\nInstagramError: ${await toastMessage.textContent}`,
       );
 
     this.password = password;
@@ -932,9 +1049,9 @@ export default class IGBot {
 
     await this.hero.click(submitButton);
 
-    const toastText = await this.waitForElement("div > div > div > div > div > p");
-    if ((await toastText.textContent) !== "Profile saved.")
-      throw new Error(`${errorMsg}\nInstagram Error: ${await toastText.textContent}`);
+    const toastMessage = await this.getMessageToast();
+    if ((await toastMessage?.textContent) !== "Profile saved.")
+      throw new Error(`${errorMsg}\nInstagramError: ${await toastMessage.textContent}`);
 
     await this.hero.waitForMillis(1e3);
 
@@ -1070,8 +1187,7 @@ export default class IGBot {
 
   @needsInit()
   @needsLogin()
-  @makesBusy()
-  async getChainingElement() {
+  protected async getChainingElement() {
     const input = await this.waitForElement("#pepChainingEnabled input[type='checkbox']");
     const element = await this.waitForElement("#pepChainingEnabled label div");
 
@@ -1081,51 +1197,31 @@ export default class IGBot {
     };
   }
 
-  @needsInit()
-  @needsLogin()
-  @makesBusy()
-  async getGenderElement() {
+  protected async getGenderElement() {
     return await this.waitForElement("#pepGender");
   }
 
-  @needsInit()
-  @needsLogin()
-  async getPhoneNoElement() {
+  protected async getPhoneNoElement() {
     return await this.waitForElement("[id='pepPhone Number']");
   }
 
-  @needsInit()
-  @needsLogin()
-  @makesBusy()
-  async getEmailElement() {
+  protected async getEmailElement() {
     return await this.waitForElement("#pepEmail");
   }
 
-  @needsInit()
-  @needsLogin()
-  @makesBusy()
-  async getBioElement() {
+  protected async getBioElement() {
     return await this.waitForElement("#pepBio");
   }
 
-  @needsInit()
-  @needsLogin()
-  @makesBusy()
-  async getWebsiteElement() {
+  protected async getWebsiteElement() {
     return await this.waitForElement("#pepWebsite");
   }
 
-  @needsInit()
-  @needsLogin()
-  @makesBusy()
-  async getNameElement() {
+  protected async getNameElement() {
     return await this.waitForElement("#pepName");
   }
 
-  @needsInit()
-  @needsLogin()
-  @makesBusy()
-  async getUsernameElement() {
+  protected async getUsernameElement() {
     return await this.waitForElement("#pepUsername");
   }
 
@@ -1133,7 +1229,7 @@ export default class IGBot {
   @needsInit()
   @needsLogin()
   @makesBusy()
-  async declineOnetapLogin() {
+  protected async declineOnetapLogin() {
     await this.goto(this.onetapLoginUrl.href, true);
 
     const declineButton = await this.findElementWithText("button", "not now");
@@ -1149,7 +1245,7 @@ export default class IGBot {
   @needsInit()
   @needsLogin()
   @makesBusy()
-  async declineNotifications() {
+  protected async declineNotifications() {
     await this.goto(this.baseInstagramUrl.href, true);
     await this.hero.waitForMillis(1e3);
 
@@ -1178,7 +1274,7 @@ export default class IGBot {
   }
 
   @needsInit()
-  async acceptCookieConsent() {
+  protected async acceptCookieConsent() {
     await this.hero.waitForPaintingStable();
 
     console.log("Checking for cookie consent modal.");
@@ -1204,11 +1300,21 @@ export default class IGBot {
   }
 
   @needsInit()
-  async isPageNotFound() {
+  protected async getMessageToast(): Promise<ISuperHTMLElement | null> {
+    const toastMessage = await this.waitForElement(
+      "body div > div > div > div > div > p",
+      1e3,
+    ).catch(() => null);
+
+    return toastMessage;
+  }
+
+  @needsInit()
+  protected async isPageNotFound() {
     return (await this.document.title) === "Page Not Found • Instagram";
   }
 
-  async repeatKey(key: ITypeInteraction, count: number) {
+  protected async repeatKey(key: ITypeInteraction, count: number) {
     for (let i = 0; i < count; i++) {
       await this.hero.type(key);
       await this.hero.waitForMillis(40);
@@ -1220,12 +1326,11 @@ export default class IGBot {
    *
    * Make sure you have a focused element before calling this.
    */
-  async clearInput() {
+  @needsInit()
+  protected async clearInput() {
     // select all text in input
-    await this.hero.interact({ keyDown: KeyboardKey.ControlLeft });
-    await this.hero.interact({ keyDown: KeyboardKey.A });
-    await this.hero.interact({ keyUp: KeyboardKey.A });
-    await this.hero.interact({ keyUp: KeyboardKey.ControlLeft });
+    await this.hero.interact({ keyDown: KeyboardKey.ControlLeft }, { keyDown: KeyboardKey.A });
+    await this.hero.interact({ keyUp: KeyboardKey.A }, { keyUp: KeyboardKey.ControlLeft });
 
     // delete all text in input
     await this.hero.type(KeyboardKey.Backspace);
