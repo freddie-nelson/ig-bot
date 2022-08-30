@@ -4,16 +4,26 @@ import { ProfileGender } from "./profile";
 dotenv.config();
 
 async function main() {
-  const bot = new IGBot(process.env.INSTA_USERNAME, process.env.INSTA_PASSWORD, true);
+  const username = process.env.INSTA_USERNAME;
+  const password = process.env.INSTA_PASSWORD;
+
+  const bot = new IGBot(username, password, true);
   await bot.init();
   await bot.login();
-  await bot.post("../test-post-video-0.mp4", {
-    caption: "what an awesome funny meme video",
-    location: "Epic Games",
-    altText: "A funny wholesome video",
-    disableComments: true,
-    hideLikesAndViews: true,
-  });
+
+  // console.log(await bot.getPosts("_brandontang_", 100));
+  const recentPost = await bot.getRecentPost("_brandontang_");
+  console.log(await bot.getPost(recentPost.id));
+  await bot.likePost(recentPost);
+  await bot.commentPost(recentPost, "That was sick as bro 🔥");
+  // console.log(await bot.getPinnedPosts("_brandontang_"));
+  // await bot.post("../test-post-video-0.mp4", {
+  //   caption: "what an awesome funny meme video",
+  //   location: "Epic Games",
+  //   altText: "A funny wholesome video",
+  //   disableComments: true,
+  //   hideLikesAndViews: true,
+  // });
   // for (let i = 0; i < 2; i++) {
   // await bot.post(
   //   ["../test-post-image-0.jpg", "../test-post-image-1.jfif", "../test-post-image-2.jpg"],
@@ -33,7 +43,7 @@ async function main() {
   //   website: "https://memerman.com",
   //   chaining: true,
   // });
-  console.log(await bot.getProfile());
+  // console.log(await bot.getProfile());
   // await bot.logout();
   await bot.close();
 }

@@ -1,6 +1,7 @@
-import Hero, { ISuperElement, KeyboardKey, LoadStatus } from "@ulixee/hero";
+import Hero, { ISuperHTMLElement, KeyboardKey, LoadStatus } from "@ulixee/hero";
 import { ITypeInteraction } from "@ulixee/hero/interfaces/IInteractions";
 import Server from "@ulixee/server";
+import { Post, PostIdentifer, PostInfo } from "./post";
 import {
   createFlagDecorator,
   makesBusy,
@@ -10,6 +11,8 @@ import {
 } from "./classDecorators";
 import { Profile, ProfileGender } from "./profile";
 import { useAbsolutePath } from "./utils/useAbsolutePath";
+import { useEscapeRegex } from "./utils/useEscapeRegex";
+import { usePostIdentifierToId } from "./utils/usePostIdentifierToId";
 import { useSpreadNum } from "./utils/useSpreadNum";
 import { useValidateEmail } from "./utils/useValidateEmail";
 import { useValidatePath } from "./utils/useValidatePath";
@@ -26,6 +29,7 @@ export interface PostOptions {
 
 export default class IGBot {
   private baseInstagramUrl = new URL("https://www.instagram.com");
+  private graphqlUrl = this.getUrl("/graphql/query");
   private loginUrl = this.getUrl("/accounts/login");
   private logoutUrl = this.getUrl("/accounts/logout");
   private onetapLoginUrl = this.getUrl("/accounts/onetap");
@@ -92,6 +96,603 @@ export default class IGBot {
     this.isInitialised = false;
     this.isLoggedIn = false;
     this.isBusy = false;
+  }
+
+  //
+  // Post Methods
+  //
+
+  /**
+   * Comments on a post.
+   *
+   * @param post The post to comment on.
+   */
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
+  async commentPost(post: PostIdentifer, comment: string) {
+    const id = usePostIdentifierToId(post);
+    const url = this.getHref(`/p/${id}/`);
+
+    console.log(`Commenting on post '${id}'.`);
+
+    await this.goto(url, true);
+
+    // type comment
+    const commentInput = await this.waitForElement("textarea[placeholder='Add a comment…']");
+    await this.hero.click(commentInput);
+    await this.clearInput();
+
+    // type comment, while replacing newlines with Shift+Enter
+    const lines = comment.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      await this.hero.type(lines[i]);
+
+      if (i < lines.length - 1) {
+        await this.hero.interact({ keyDown: KeyboardKey.Shift }, { keyPress: KeyboardKey.Enter });
+        await this.hero.interact({ keyUp: KeyboardKey.Shift });
+        await this.hero.waitForMillis(200);
+      }
+    }
+
+    // submit comment
+    await this.hero.interact({ keyPress: KeyboardKey.Enter });
+
+    // wait for comment to be posted
+    await this.waitForElement("[aria-label='Loading...']").catch(() => null);
+    await this.waitForNoElement("[aria-label='Loading...']", 60e3);
+
+    // check for error
+    const toastMessage = await this.getMessageToast();
+    if (toastMessage) {
+      throw new Error(
+        `Failed to comment '${comment}' on post '${url}'.\nInstagramError: ${await toastMessage.textContent}`,
+      );
+    }
+
+    console.log(`Commented '${comment}' on post '${id}'.`);
+  }
+
+  /**
+   * Unlikes a post.
+   *
+   * @param post The post to unlike.
+   */
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
+  async unlikePost(post: PostIdentifer) {
+    const id = usePostIdentifierToId(post);
+    const url = this.getHref(`/p/${id}/`);
+
+    console.log(`Unliking post '${id}'.`);
+
+    await this.goto(url, true);
+
+    this.isBusy = false;
+    if (!(await this.isPostLiked(post))) return;
+    this.isBusy = true;
+
+    // click unlike button
+    const unlikeButtonIcon = await this.waitForElement("[aria-label='Unlike']");
+    const unlikeButton = await unlikeButtonIcon.parentElement.parentElement;
+    await this.hero.click(unlikeButton);
+
+    // wait for response from server
+    await this.hero.waitForResource({
+      url: /instagram.com\/web\/likes\/(.*)\/unlike\//,
+      type: "XHR",
+    });
+
+    console.log(`Unliked post '${id}'.`);
+  }
+
+  /**
+   * Likes a post.
+   *
+   * @param post The identifier of the post to like.
+   */
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
+  async likePost(post: PostIdentifer) {
+    const id = usePostIdentifierToId(post);
+    const url = this.getHref(`/p/${id}/`);
+
+    console.log(`Liking post '${id}'.`);
+
+    await this.goto(url, true);
+
+    this.isBusy = false;
+    if (await this.isPostLiked(post)) return;
+    this.isBusy = true;
+
+    // click the like button
+    const likeButtonIcon = await this.waitForElement("[aria-label='Like']");
+    const likeButton = await likeButtonIcon.parentElement.parentElement;
+    await this.hero.click(likeButton);
+
+    // wait for response from server
+    await this.hero.waitForResource({
+      url: /instagram.com\/web\/likes\/(.*)\/like\//,
+      type: "XHR",
+    });
+
+    console.log(`Liked post '${id}'.`);
+  }
+
+  /**
+   * Gets whether a post is liked by the currently logged in user.
+   *
+   * @param post The identifier of the post.
+   * @returns Whether the post is liked.
+   */
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
+  async isPostLiked(post: PostIdentifer) {
+    const id = usePostIdentifierToId(post);
+    const url = this.getHref(`/p/${id}/`);
+
+    await this.goto(url, true);
+
+    return (await this.waitForElement("[aria-label='Like']")) === null;
+  }
+
+  /**
+   * Gets detailed information about a post.
+   *
+   * @param identifier The identifier of the post to get.
+   */
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
+  async getPost(identifier: PostIdentifer): Promise<Post> {
+    const id = usePostIdentifierToId(identifier);
+    const url = this.getHref(`/p/${id}/`);
+
+    // get post info
+    console.log(`Getting post info for post '${id}'.`);
+
+    await this.goto(url);
+
+    // get post info from api request made by page
+    const info = await this.hero
+      .waitForResource({
+        url: /i.instagram.com\/api\/v1\/media\/(.*)\/info\//,
+        type: "XHR",
+      })
+      .then(async (resource) => (await resource.json).items[0]);
+
+    const isVideo = info.media_type === 2;
+    const isSlideshow = !!info.carousel_media;
+
+    let media: Post["media"] = "";
+    if (isSlideshow) {
+      media = info.carousel_media.map((media: any) =>
+        media.media_type === 2
+          ? media.video_versions[0].url
+          : media.image_versions2.candidates[0].url,
+      );
+    } else if (isVideo) {
+      media = info.video_versions[0].url;
+    } else {
+      media = info.image_versions2.candidates[0].url;
+    }
+
+    console.log("Got post info.");
+
+    return {
+      id,
+      url,
+      username: info.user.username,
+      caption: info.caption.text,
+      likes: info.like_count,
+      isSlideshow,
+      isVideo,
+      media,
+      views: info?.view_count,
+    };
+
+    // GET POST INFO FROM SCRAPING
+
+    // const aside = await this.waitForElement(
+    //   "article[role='presentation'] div[role='presentation']",
+    // );
+
+    // // get username
+    // const header = await aside.querySelector("header");
+    // const profilePic = await header.querySelector("img"); // username is stored in alt attribute of profile pic
+
+    // // username is first word in alt text and is followed by "'s", so we can split on "'s "
+    // const username = await (await profilePic.getAttribute("alt")).split("'s ")[0];
+    // if (!username) throw new Error("Could not get username.");
+
+    // // get caption
+    // const description = String(
+    //   await (
+    //     await this.waitForElement("meta[property='og:title']")
+    //   ).content,
+    // );
+
+    // const startOfCaption = description.indexOf('Instagram: "') + 'Instagram: "'.length;
+    // const caption = startOfCaption !== undefined ? description.slice(startOfCaption, -1) : "";
+
+    // // get likes
+    // const likesAnchorSelector = `a[href='/p/${id}/liked_by/']`;
+    // const allLikesAnchors = await aside.querySelectorAll(likesAnchorSelector);
+
+    // const isOtherLikes = (await allLikesAnchors.length) > 1;
+    // const likesAnchor = isOtherLikes ? allLikesAnchors[1] : allLikesAnchors[0];
+    // const likesElement = await likesAnchor.querySelector("span");
+
+    // let likes = undefined;
+    // if (likesElement) {
+    //   likes = Number((await likesElement.textContent)?.replace(",", "")) + (isOtherLikes ? 1 : 0);
+    // }
+
+    // return {
+    //   id,
+    //   url,
+    //   username,
+    //   caption,
+    //   likes,
+    //   media: "",
+    //   isVideo: false,
+    //   views: undefined,
+    // };
+  }
+
+  /**
+   * Gets a user's pinned posts.
+   *
+   * @param username The username of the user to get posts from.
+   * @param count The number of posts to get. @default Infinity
+   *
+   * @returns An array of {@link PostInfo} objects for each pinned post.
+   */
+  getPinnedPosts(username: string, count = Infinity) {
+    return this.getPosts(username, count, false, true);
+  }
+
+  /**
+   * Gets a user's most recent post.
+   *
+   * This method does not include pinned posts in it's search.
+   *
+   * @param username
+   *
+   * @returns The user's most recent post, if it exists.
+   */
+  getRecentPost(username: string) {
+    return this.getPosts(username, 1).then((posts) => posts[0]);
+  }
+
+  /**
+   * Gets a user's posts.
+   *
+   * By default, this method does not include pinned posts in it's search.
+   *
+   * @param username The username of the user to get posts from.
+   * @param count The maxium number of posts to get, `Infinity` will get all posts.
+   * @param filterPinned Whether to filter out pinned posts. @default true
+   * @param onlyPinned Whether to only get pinned posts. @default false
+   *
+   * @returns An array of {@link PostInfo} objects for each post.
+   */
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
+  async getPosts(
+    username: string,
+    count: number,
+    filterPinned = true,
+    onlyPinned = false,
+  ): Promise<PostInfo[]> {
+    console.log(`Getting ${count} posts by '${username}'.`);
+
+    await this.goto(this.getHref(`/${username}`));
+
+    // check if user exists
+    if (await this.isPageNotFound()) {
+      throw new Error(`User '${username}' does not exist.`);
+    }
+
+    const allPosts: PostInfo[] = [];
+    let lastPostRead: PostInfo; // this acts as 'cursor' for infinite scroll pagination
+    let rowElementHeight = 0;
+    let currentScrollY = 0;
+    let noMorePinned = false;
+
+    console.log("Finding post elements and extracting links.");
+    while (allPosts.length < count) {
+      // if this isn't first time reading posts, scroll for more posts
+      if (lastPostRead) {
+        currentScrollY += rowElementHeight * 4;
+        await Promise.all([
+          this.hero.scrollTo([0, currentScrollY]),
+          this.hero.waitForResource({
+            url: new RegExp(`${useEscapeRegex(this.graphqlUrl.href)}/\\?query_hash=(.*)`),
+          }),
+        ]);
+      }
+
+      // get next rows of posts
+      const container = await this.waitForElement("article > div > div");
+      const rows = Array.from(await container.children);
+
+      // save row element height for scrolling for more posts
+      rowElementHeight = await rows[0].clientHeight;
+
+      // get post elements from rows
+      const postElements: ISuperHTMLElement[] = [];
+      for (const r of rows) {
+        postElements.push(...Array.from(await r.children));
+      }
+
+      // add posts
+      const posts: PostInfo[] = [];
+
+      for (const p of postElements) {
+        const link = await p.querySelector("a");
+        if (!link) continue;
+
+        // filter out pinned posts if necessary
+        const isPinned = (await p.querySelector("[aria-label='Pinned post icon']")) !== null;
+        if (filterPinned && isPinned) continue;
+
+        // exit if we've reached the end of pinned posts
+        // (if we're only getting pinned posts)
+        if (onlyPinned && !isPinned) {
+          noMorePinned = true; // set flag to exit outer loop
+          break;
+        }
+
+        // add post to current posts list
+        const url = this.getHref(await link.getAttribute("href"));
+        posts.push({
+          id: url.split("/p/").pop().slice(0, -1),
+          url,
+          isPinned,
+        });
+      }
+
+      // remove already read posts
+      if (lastPostRead) {
+        posts.splice(posts.indexOf(lastPostRead));
+      }
+
+      // we have reached the end of the user's posts
+      if (posts.length === 0) break;
+
+      lastPostRead = posts[posts.length - 1];
+      allPosts.push(...posts);
+
+      console.log(`Found ${Math.min(count, allPosts.length)} / ${count} posts.`);
+
+      // we have reached the end of the user's pinned posts
+      // this means that onlyPinned is also true
+      // so we exit here and return posts, which will only be pinned posts
+      if (noMorePinned) break;
+    }
+
+    // limit posts to count
+    allPosts.length = Math.min(count, allPosts.length);
+
+    return allPosts;
+  }
+
+  /**
+   * Creates a post.
+   *
+   * @param content The content to post, an array of values will be posted as a slideshow
+   * @param caption The caption to add to the post, default is no caption.
+   */
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
+  async post(content: string | string[], options: PostOptions = {}) {
+    console.log(
+      `Posting ${
+        Array.isArray(content) ? `[${content.map((p) => `'${p}'`).join(", ")}]` : `'${content}'`
+      } with caption '${options.caption}'.`,
+    );
+
+    await this.goto(this.baseInstagramUrl.href);
+
+    // open post dialog
+    const createPostButton = await this.waitForElement("[aria-label='New post']");
+    await this.hero.click(createPostButton);
+
+    await this.waitForElement("div[role='dialog']");
+
+    // upload files
+    await (this.hero as any).interceptFileChooser();
+
+    const chooseFileButton = await this.waitForElementWithText("button", "select from computer");
+    await this.hero.click(chooseFileButton);
+
+    console.log("Waiting for file chooser.");
+    const fileChooser = await this.hero.waitForFileChooser();
+    const contentAbsolute = (Array.isArray(content) ? content : [content]).map(
+      (p) => (useValidatePath(p), useValidInstagramMedia(useAbsolutePath(p))),
+    );
+
+    await fileChooser.chooseFiles(...contentAbsolute);
+
+    // if this button shows then an error has occured while uploading, probably file types not being supported.
+    const selectOtherFilesButton = await this.waitForElementWithText(
+      "button",
+      "Select Other Files",
+      3e3,
+    ).catch(() => null);
+    if (selectOtherFilesButton) {
+      throw new Error("Failed to upload files, most likely due to unsupported file types.");
+    }
+
+    // skip next 2 pages of post dialog
+    for (let i = 0; i < 2; i++) {
+      const nextButton = await this.waitForElementWithText("button", "next");
+      await this.hero.click(nextButton);
+      await this.hero.waitForMillis(useSpreadNum(1e3));
+    }
+
+    // enter caption
+    if (options.caption) {
+      const captionInput = await this.waitForElement("textarea[aria-label='Write a caption...']");
+      await this.hero.click(captionInput);
+      await this.hero.type(options.caption);
+    }
+
+    // enter location
+    if (options.location) {
+      const locationInput = await this.waitForElement("input[name='creation-location-input']");
+      await this.hero.click(locationInput);
+      await this.hero.type(options.location);
+
+      // location result
+      const topResultSpan = await this.waitForElement(
+        "div[aria-hidden='false'] button div span",
+        60e3,
+      ).catch(() => null);
+      if (!topResultSpan) throw new Error(`Invalid location, '${options.location}'.`);
+
+      await this.hero.click(topResultSpan);
+    }
+
+    // enter alt text
+    if (options.altText) {
+      const accessibilityAccordion = await this.waitForElementWithText(
+        "div[role='button'] > div",
+        "Accessibility",
+      );
+      await this.hero.click(accessibilityAccordion);
+
+      const altTextInput = await this.waitForElement("input[placeholder='Write alt text...']");
+      await this.hero.click(altTextInput);
+      await this.hero.type(options.altText);
+
+      await this.hero.click(accessibilityAccordion);
+    }
+
+    // open advanced settings accordion
+    if (options.hideLikesAndViews || options.disableComments) {
+      const advancedSettingsAccordion = await this.waitForElementWithText(
+        "div[role='button'] > div",
+        "Advanced Settings",
+      );
+      await this.hero.click(advancedSettingsAccordion);
+    }
+
+    // hide likes and views
+    if (options.hideLikesAndViews) {
+      const title = await this.waitForElementWithText(
+        "div > div > div",
+        "Hide like and view counts on this post",
+      );
+      const toggle = await title.parentElement.querySelector("label");
+
+      await this.hero.click(toggle);
+    }
+
+    // disable comments
+    if (options.disableComments) {
+      const title = await this.waitForElementWithText("div > div > div", "Turn off commenting");
+      const toggle = await title.parentElement.querySelector("label");
+
+      await this.hero.click(toggle);
+    }
+
+    // share post
+    const shareButton = await this.waitForElementWithText("button", "share");
+    await this.hero.click(shareButton);
+
+    await this.waitForNoElement("img[alt='Spinner placeholder']", 300e3);
+
+    if (await this.waitForElementWithText("div", "Post couldn't be shared", 3e3).catch(() => null))
+      throw new Error("Failed to post, post couldn't be shared.");
+
+    console.log("Posted.");
+  }
+
+  //
+  // Auth Methods
+  //
+
+  @needsFree()
+  @needsInit()
+  @makesBusy()
+  async login() {
+    console.log(`Logging in as '${this.username}'.`);
+    await this.goto(this.loginUrl.href);
+
+    const usernameInputSelector = "input[name='username']";
+    const usernameInput = await this.querySelector(usernameInputSelector);
+
+    const passwordInputSelector = "input[name='password']";
+    const passwordInput = await this.querySelector(passwordInputSelector);
+
+    const submitButtonSelector = "button[type='submit']";
+    const submitButton = await this.querySelector(submitButtonSelector);
+
+    console.log(`Entering username, '${this.username}'.`);
+    await this.hero.click(usernameInput);
+    await this.hero.type(this.username);
+
+    console.log(`Entering password, '${this.password}'.`);
+    await this.hero.click(passwordInput);
+    await this.hero.type(this.password);
+
+    console.log("Submitting login details.");
+    await this.hero.click(submitButton);
+
+    // wait for response
+    const loadingSpinnerSelector = `${submitButtonSelector} [data-visualcompletion='loading-state']`;
+    await this.waitForElement(loadingSpinnerSelector, 5e3).catch(() => null);
+    await this.waitForNoElement(loadingSpinnerSelector, 30e3);
+    await this.hero.waitForMillis(1000);
+
+    console.log("Checking for login errors.");
+    const errorMsg = await this.querySelector("[role='alert']");
+    if (errorMsg) {
+      console.log("Failed to login, you may want to check your username and password.");
+      console.log(`InstagramError: ${await errorMsg.textContent}`);
+      throw new Error("Failed to login.");
+    }
+
+    console.log("Waiting for post login redirect.");
+    await this.waitForNavigationConditional(this.loginUrl.pathname);
+
+    this.isLoggedIn = true;
+    console.log("Logged in.");
+
+    console.log("Setting up for scraping after login.");
+
+    // escape isBusy flag
+    this.isBusy = false;
+    await this.declineOnetapLogin();
+    await this.declineNotifications();
+    this.isBusy = true;
+  }
+
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
+  async logout() {
+    console.log(`Logging out '${this.username}'.`);
+    await this.goto(this.logoutUrl.href);
+    await this.waitForElement("input[name='username']");
+
+    this.isLoggedIn = false;
+    console.log("Logged out.");
   }
 
   //
@@ -364,10 +965,10 @@ export default class IGBot {
     const changePasswordButton = await this.waitForElementWithText("button", "Change Password");
     await this.hero.click(changePasswordButton);
 
-    const toastText = await this.waitForElement("div > div > div > div > div > p");
-    if ((await toastText.textContent) !== "Password changed.")
+    const toastMessage = await this.getMessageToast();
+    if ((await toastMessage?.textContent) !== "Password changed.")
       throw new Error(
-        `Could not set password to '${password}', check the provided password is valid and try again.\nInstagram Error: ${await toastText.textContent}`,
+        `Could not set password to '${password}', check the provided password is valid and try again.\nInstagramError: ${await toastMessage.textContent}`,
       );
 
     this.password = password;
@@ -389,9 +990,9 @@ export default class IGBot {
 
     await this.hero.click(submitButton);
 
-    const toastText = await this.waitForElement("div > div > div > div > div > p");
-    if ((await toastText.textContent) !== "Profile saved.")
-      throw new Error(`${errorMsg}\nInstagram Error: ${await toastText.textContent}`);
+    const toastMessage = await this.getMessageToast();
+    if ((await toastMessage?.textContent) !== "Profile saved.")
+      throw new Error(`${errorMsg}\nInstagramError: ${await toastMessage.textContent}`);
 
     await this.hero.waitForMillis(1e3);
 
@@ -527,8 +1128,7 @@ export default class IGBot {
 
   @needsInit()
   @needsLogin()
-  @makesBusy()
-  async getChainingElement() {
+  protected async getChainingElement() {
     const input = await this.waitForElement("#pepChainingEnabled input[type='checkbox']");
     const element = await this.waitForElement("#pepChainingEnabled label div");
 
@@ -538,262 +1138,39 @@ export default class IGBot {
     };
   }
 
-  @needsInit()
-  @needsLogin()
-  @makesBusy()
-  async getGenderElement() {
+  protected async getGenderElement() {
     return await this.waitForElement("#pepGender");
   }
 
-  @needsInit()
-  @needsLogin()
-  async getPhoneNoElement() {
+  protected async getPhoneNoElement() {
     return await this.waitForElement("[id='pepPhone Number']");
   }
 
-  @needsInit()
-  @needsLogin()
-  @makesBusy()
-  async getEmailElement() {
+  protected async getEmailElement() {
     return await this.waitForElement("#pepEmail");
   }
 
-  @needsInit()
-  @needsLogin()
-  @makesBusy()
-  async getBioElement() {
+  protected async getBioElement() {
     return await this.waitForElement("#pepBio");
   }
 
-  @needsInit()
-  @needsLogin()
-  @makesBusy()
-  async getWebsiteElement() {
+  protected async getWebsiteElement() {
     return await this.waitForElement("#pepWebsite");
   }
 
-  @needsInit()
-  @needsLogin()
-  @makesBusy()
-  async getNameElement() {
+  protected async getNameElement() {
     return await this.waitForElement("#pepName");
   }
 
-  @needsInit()
-  @needsLogin()
-  @makesBusy()
-  async getUsernameElement() {
+  protected async getUsernameElement() {
     return await this.waitForElement("#pepUsername");
   }
 
-  /**
-   * Creates a post.
-   *
-   * @param content The content to post, an array of values will be posted as a slideshow
-   * @param caption The caption to add to the post, default is no caption.
-   */
   @needsFree()
   @needsInit()
   @needsLogin()
   @makesBusy()
-  async post(content: string | string[], options: PostOptions = {}) {
-    console.log(
-      `Posting ${
-        Array.isArray(content) ? `[${content.map((p) => `'${p}'`).join(", ")}]` : `'${content}'`
-      } with caption '${options.caption}'.`,
-    );
-
-    await this.goto(this.baseInstagramUrl.href);
-
-    // open post dialog
-    const createPostButton = await this.waitForElement("[aria-label='New post']");
-    await this.hero.click(createPostButton);
-
-    await this.waitForElement("div[role='dialog']");
-
-    // upload files
-    await (this.hero as any).interceptFileChooser();
-
-    const chooseFileButton = await this.waitForElementWithText("button", "select from computer");
-    await this.hero.click(chooseFileButton);
-
-    console.log("Waiting for file chooser.");
-    const fileChooser = await this.hero.waitForFileChooser();
-    const contentAbsolute = (Array.isArray(content) ? content : [content]).map(
-      (p) => (useValidatePath(p), useValidInstagramMedia(useAbsolutePath(p))),
-    );
-
-    await fileChooser.chooseFiles(...contentAbsolute);
-
-    // if this button shows then an error has occured while uploading, probably file types not being supported.
-    const selectOtherFilesButton = await this.waitForElementWithText(
-      "button",
-      "Select Other Files",
-      3e3,
-    ).catch(() => null);
-    if (selectOtherFilesButton) {
-      throw new Error("Failed to upload files, most likely due to unsupported file types.");
-    }
-
-    // skip next 2 pages of post dialog
-    for (let i = 0; i < 2; i++) {
-      const nextButton = await this.waitForElementWithText("button", "next");
-      await this.hero.click(nextButton);
-      await this.hero.waitForMillis(useSpreadNum(1e3));
-    }
-
-    // enter caption
-    if (options.caption) {
-      const captionInput = await this.waitForElement("textarea[aria-label='Write a caption...']");
-      await this.hero.click(captionInput);
-      await this.hero.type(options.caption);
-    }
-
-    // enter location
-    if (options.location) {
-      const locationInput = await this.waitForElement("input[name='creation-location-input']");
-      await this.hero.click(locationInput);
-      await this.hero.type(options.location);
-
-      // location result
-      const topResultSpan = await this.waitForElement(
-        "div[aria-hidden='false'] button div span",
-        60e3,
-      ).catch(() => null);
-      if (!topResultSpan) throw new Error(`Invalid location, '${options.location}'.`);
-
-      await this.hero.click(topResultSpan);
-    }
-
-    // enter alt text
-    if (options.altText) {
-      const accessibilityAccordion = await this.waitForElementWithText(
-        "div[role='button'] > div",
-        "Accessibility",
-      );
-      await this.hero.click(accessibilityAccordion);
-
-      const altTextInput = await this.waitForElement("input[placeholder='Write alt text...']");
-      await this.hero.click(altTextInput);
-      await this.hero.type(options.altText);
-
-      await this.hero.click(accessibilityAccordion);
-    }
-
-    // open advanced settings accordion
-    if (options.hideLikesAndViews || options.disableComments) {
-      const advancedSettingsAccordion = await this.waitForElementWithText(
-        "div[role='button'] > div",
-        "Advanced Settings",
-      );
-      await this.hero.click(advancedSettingsAccordion);
-    }
-
-    // hide likes and views
-    if (options.hideLikesAndViews) {
-      const title = await this.waitForElementWithText(
-        "div > div > div",
-        "Hide like and view counts on this post",
-      );
-      const toggle = await title.parentElement.querySelector("label");
-
-      await this.hero.click(toggle);
-    }
-
-    // disable comments
-    if (options.disableComments) {
-      const title = await this.waitForElementWithText("div > div > div", "Turn off commenting");
-      const toggle = await title.parentElement.querySelector("label");
-
-      await this.hero.click(toggle);
-    }
-
-    // share post
-    const shareButton = await this.waitForElementWithText("button", "share");
-    await this.hero.click(shareButton);
-
-    await this.waitForNoElement("img[alt='Spinner placeholder']", 300e3);
-
-    if (await this.waitForElementWithText("div", "Post couldn't be shared", 3e3).catch(() => null))
-      throw new Error("Failed to post, post couldn't be shared.");
-
-    console.log("Posted.");
-  }
-
-  @needsFree()
-  @needsInit()
-  @needsLogin()
-  @makesBusy()
-  async logout() {
-    console.log(`Logging out '${this.username}'.`);
-    await this.goto(this.logoutUrl.href);
-    await this.waitForElement("input[name='username']");
-
-    this.isLoggedIn = false;
-    console.log("Logged out.");
-  }
-
-  @needsFree()
-  @needsInit()
-  @makesBusy()
-  async login() {
-    console.log(`Logging in as '${this.username}'.`);
-    await this.goto(this.loginUrl.href);
-
-    const usernameInputSelector = "input[name='username']";
-    const usernameInput = await this.querySelector(usernameInputSelector);
-
-    const passwordInputSelector = "input[name='password']";
-    const passwordInput = await this.querySelector(passwordInputSelector);
-
-    const submitButtonSelector = "button[type='submit']";
-    const submitButton = await this.querySelector(submitButtonSelector);
-
-    console.log(`Entering username, '${this.username}'.`);
-    await this.hero.click(usernameInput);
-    await this.hero.type(this.username);
-
-    console.log(`Entering password, '${this.password}'.`);
-    await this.hero.click(passwordInput);
-    await this.hero.type(this.password);
-
-    console.log("Submitting login details.");
-    await this.hero.click(submitButton);
-
-    // wait for response
-    const loadingSpinnerSelector = `${submitButtonSelector} [data-visualcompletion='loading-state']`;
-    await this.waitForElement(loadingSpinnerSelector, 5e3).catch(() => null);
-    await this.waitForNoElement(loadingSpinnerSelector, 30e3);
-    await this.hero.waitForMillis(1000);
-
-    console.log("Checking for login errors.");
-    const errorMsg = await this.querySelector("[role='alert']");
-    if (errorMsg) {
-      console.log("Failed to login, you may want to check your username and password.");
-      console.log(`Instagram Error: ${await errorMsg.textContent}`);
-      throw new Error("Failed to login.");
-    }
-
-    console.log("Waiting for post login redirect.");
-    await this.waitForNavigationConditional(this.loginUrl.pathname);
-
-    this.isLoggedIn = true;
-    console.log("Logged in.");
-
-    console.log("Setting up for scraping after login.");
-
-    // escape isBusy flag
-    this.isBusy = false;
-    await this.declineOnetapLogin();
-    await this.declineNotifications();
-    this.isBusy = true;
-  }
-
-  @needsFree()
-  @needsInit()
-  @needsLogin()
-  @makesBusy()
-  async declineOnetapLogin() {
+  protected async declineOnetapLogin() {
     await this.goto(this.onetapLoginUrl.href, true);
 
     const declineButton = await this.findElementWithText("button", "not now");
@@ -809,7 +1186,7 @@ export default class IGBot {
   @needsInit()
   @needsLogin()
   @makesBusy()
-  async declineNotifications() {
+  protected async declineNotifications() {
     await this.goto(this.baseInstagramUrl.href, true);
     await this.hero.waitForMillis(1e3);
 
@@ -838,7 +1215,7 @@ export default class IGBot {
   }
 
   @needsInit()
-  async acceptCookieConsent() {
+  protected async acceptCookieConsent() {
     await this.hero.waitForPaintingStable();
 
     console.log("Checking for cookie consent modal.");
@@ -863,7 +1240,22 @@ export default class IGBot {
     console.log("Accepted cookies.");
   }
 
-  async repeatKey(key: ITypeInteraction, count: number) {
+  @needsInit()
+  protected async getMessageToast(): Promise<ISuperHTMLElement | null> {
+    const toastMessage = await this.waitForElement(
+      "body div > div > div > div > div > p",
+      1e3,
+    ).catch(() => null);
+
+    return toastMessage;
+  }
+
+  @needsInit()
+  protected async isPageNotFound() {
+    return (await this.document.title) === "Page Not Found • Instagram";
+  }
+
+  protected async repeatKey(key: ITypeInteraction, count: number) {
     for (let i = 0; i < count; i++) {
       await this.hero.type(key);
       await this.hero.waitForMillis(40);
@@ -875,12 +1267,11 @@ export default class IGBot {
    *
    * Make sure you have a focused element before calling this.
    */
-  async clearInput() {
+  @needsInit()
+  protected async clearInput() {
     // select all text in input
-    await this.hero.interact({ keyDown: KeyboardKey.ControlLeft });
-    await this.hero.interact({ keyDown: KeyboardKey.A });
-    await this.hero.interact({ keyUp: KeyboardKey.A });
-    await this.hero.interact({ keyUp: KeyboardKey.ControlLeft });
+    await this.hero.interact({ keyDown: KeyboardKey.ControlLeft }, { keyDown: KeyboardKey.A });
+    await this.hero.interact({ keyUp: KeyboardKey.A }, { keyUp: KeyboardKey.ControlLeft });
 
     // delete all text in input
     await this.hero.type(KeyboardKey.Backspace);
