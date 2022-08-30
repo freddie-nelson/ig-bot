@@ -1,6 +1,13 @@
 import Hero, { ISuperElement, KeyboardKey, LoadStatus } from "@ulixee/hero";
 import { ITypeInteraction } from "@ulixee/hero/interfaces/IInteractions";
 import Server from "@ulixee/server";
+import {
+  createFlagDecorator,
+  makesBusy,
+  needsFree,
+  needsInit,
+  needsLogin,
+} from "./classDecorators";
 import { Profile, ProfileGender } from "./profile";
 import { useAbsolutePath } from "./utils/useAbsolutePath";
 import { useSpreadNum } from "./utils/useSpreadNum";
@@ -16,72 +23,6 @@ export interface PostOptions {
   hideLikesAndViews?: boolean;
   disableComments?: boolean;
 }
-
-export function createFlagDecorator(propertyGetter: string, errorMsg: string) {
-  return () => {
-    return (target: any, key: string, descriptor: PropertyDescriptor) => {
-      if (!target[propertyGetter])
-        throw new Error(`Target does not contain getter for '${propertyGetter}'.`);
-
-      const originalFunc = descriptor.value;
-
-      descriptor.value = function (...args: any[]) {
-        if (target[propertyGetter].apply(this)) {
-          return originalFunc.apply(this, args);
-        } else {
-          throw new Error(errorMsg.replace("$key", key));
-        }
-      };
-    };
-  };
-}
-
-const needsInit = createFlagDecorator(
-  "getIsInitialised",
-  "You must initalize the client before using '$key'.",
-);
-const needsLogin = createFlagDecorator(
-  "getIsLoggedIn",
-  "The client must be logged in before using '$key'.",
-);
-
-const needsFree = createFlagDecorator(
-  "getIsFree",
-  "The client must be free in order to use '$key'.",
-);
-
-const makesBusy = () => {
-  return (target: any, key: string, descriptor: PropertyDescriptor) => {
-    const originalFunc = descriptor.value;
-
-    descriptor.value = async function (...args: any[]) {
-      this.isBusy = true;
-      const returnVal = await originalFunc.apply(this, args);
-      this.isBusy = false;
-
-      return returnVal;
-    };
-  };
-};
-
-const gracefulHeroClose = () => {
-  return (target: any, key: string, descriptor: PropertyDescriptor) => {
-    const originalFunc = descriptor.value;
-
-    descriptor.value = async function (...args: any[]) {
-      if (!this.hero || !(this.hero instanceof Hero))
-        throw new Error("Hero instance does not exist on target.");
-
-      try {
-        return originalFunc.apply(this, args);
-      } catch (error) {
-        await this.close();
-        console.log("Closed hero instance.");
-        throw error;
-      }
-    };
-  };
-};
 
 export default class IGBot {
   private baseInstagramUrl = new URL("https://www.instagram.com");
