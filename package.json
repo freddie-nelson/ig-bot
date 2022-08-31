@@ -10,12 +10,12 @@
     "build": "npm run clean && webpack",
     "build:ts": "tsc -p tsconfig.json",
     "build:watch": "tsc -w -p tsconfig.json",
-    "build:release": "npm run clean && tsc -p tsconfig.release.json",
     "lint": "eslint . --ext .ts --ext .mts",
     "test": "jest --coverage",
     "prettier": "prettier --config .prettierrc --write .",
     "test:watch": "jest --watch",
-    "prepare": "husky install"
+    "prepare": "husky install",
+    "example": "node -r tsconfig-paths/register -r ts-node/register runExample.ts"
   },
   "dependencies": {
     "@ulixee/hero": "^2.0.0-alpha.9",

@@ -89,6 +89,8 @@ export default class IGBot {
    * The client will need to be reinitialized before it can be used again.
    */
   @needsInit()
+  @needsFree()
+  @makesBusy()
   async close() {
     await this.hero.close();
     await this.core.close();
