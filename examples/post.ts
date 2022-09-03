@@ -1,11 +1,14 @@
 import IGBot from "@/igBot";
 import { Example } from "./example";
 
-const login: Example = async (username, password) => {
+const post: Example = async (username, password) => {
   const bot = new IGBot(username, password);
   await bot.init();
   await bot.login();
+  await bot.post("../test-post-image-0.jpg", {
+    caption: "This is a post.",
+  });
   await bot.close();
 };
 
-export default login;
+export default post;
