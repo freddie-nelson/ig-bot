@@ -28,30 +28,30 @@ export interface PostOptions {
 }
 
 export default class IGBot {
-  private baseInstagramUrl = new URL("https://www.instagram.com");
-  private graphqlUrl = this.getUrl("/graphql/query");
-  private loginUrl = this.getUrl("/accounts/login");
-  private logoutUrl = this.getUrl("/accounts/logout");
-  private onetapLoginUrl = this.getUrl("/accounts/onetap");
-  private editAccountUrl = this.getUrl("/accounts/edit");
-  private changePasswordUrl = this.getUrl("/accounts/password/change");
+  protected baseInstagramUrl = new URL("https://www.instagram.com");
+  protected graphqlUrl = this.getUrl("/graphql/query");
+  protected loginUrl = this.getUrl("/accounts/login");
+  protected logoutUrl = this.getUrl("/accounts/logout");
+  protected onetapLoginUrl = this.getUrl("/accounts/onetap");
+  protected editAccountUrl = this.getUrl("/accounts/edit");
+  protected changePasswordUrl = this.getUrl("/accounts/password/change");
 
-  private core: Server;
-  private hero: Hero;
-  private document: Hero["document"];
+  protected core: Server;
+  protected hero: Hero;
+  protected document: Hero["document"];
 
   // client state flags
-  private isInitialised = false;
+  protected isInitialised = false;
   getIsInitialised() {
     return this.isInitialised;
   }
 
-  private isLoggedIn = false;
+  protected isLoggedIn = false;
   getIsLoggedIn() {
     return this.isLoggedIn;
   }
 
-  private isBusy = false;
+  protected isBusy = false;
   getIsBusy() {
     return this.isBusy;
   }
@@ -59,7 +59,11 @@ export default class IGBot {
     return !this.isBusy;
   }
 
-  constructor(private username: string, private password: string, private showChrome = false) {}
+  constructor(
+    protected username: string,
+    protected password: string,
+    protected showChrome = false,
+  ) {}
 
   /**
    * Initializes the instagram client.
@@ -292,7 +296,7 @@ export default class IGBot {
   @needsInit()
   @needsLogin()
   @makesBusy()
-  async commentPost(post: PostIdentifer, comment: string) {
+  async comment(post: PostIdentifer, comment: string) {
     const id = usePostIdentifierToId(post);
     const url = this.getHref(`/p/${id}/`);
 
@@ -816,10 +820,15 @@ export default class IGBot {
   // Auth Methods
   //
 
+  /**
+   * Logs in to Instagram using `this.username` and `this.password`.
+   */
   @needsFree()
   @needsInit()
   @makesBusy()
   async login() {
+    if (this.isLoggedIn) throw new Error(`Already logged in to instagram, you must logout first.`);
+
     console.log(`Logging in as '${this.username}'.`);
     await this.goto(this.loginUrl.href);
 
@@ -877,6 +886,8 @@ export default class IGBot {
   @needsLogin()
   @makesBusy()
   async logout() {
+    if (!this.isLoggedIn) throw new Error(`Not logged in to instagram.`);
+
     console.log(`Logging out '${this.username}'.`);
     await this.goto(this.logoutUrl.href);
     await this.waitForElement("input[name='username']");
@@ -889,6 +900,11 @@ export default class IGBot {
   // Set Profile Details Methods
   //
 
+  /**
+   * Sets the currently logged in user's profile details.
+   *
+   * @param profile The profile details to set
+   */
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -917,6 +933,11 @@ export default class IGBot {
     console.log("Profile updated.");
   }
 
+  /**
+   * Sets the currently logged in user's chaining value.
+   *
+   * @param chaining Whether to enable chaining
+   */
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -934,9 +955,21 @@ export default class IGBot {
     console.log("Profile chaining updated.");
   }
 
+  /**
+   * Sets the currently logged in user's gender.
+   *
+   * @param gender The new gender
+   */
   async setGender(
     gender: ProfileGender.MALE | ProfileGender.FEMALE | ProfileGender.PREFER_NOT_TO_SAY,
   ): Promise<void>;
+
+  /**
+   * Sets the currently logged in user's gender.
+   *
+   * @param gender `ProfileGender.CUSTOM`
+   * @param customGender The new gender
+   */
   async setGender(gender: ProfileGender.CUSTOM, customGender: string): Promise<void>;
 
   @needsFree()
@@ -984,6 +1017,11 @@ export default class IGBot {
     console.log("Profile gender updated.");
   }
 
+  /**
+   * Sets the currently logged in user's phone number.
+   *
+   * @param phoneNo The new phone number
+   */
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -1005,6 +1043,11 @@ export default class IGBot {
     console.log("Profile phone number updated.");
   }
 
+  /**
+   * Sets the currently logged in user's email.
+   *
+   * @param email The new email
+   */
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -1028,6 +1071,11 @@ export default class IGBot {
     console.log("Profile email updated.");
   }
 
+  /**
+   * Sets the currently logged in user's bio.
+   *
+   * @param bio The new bio
+   */
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -1051,6 +1099,11 @@ export default class IGBot {
     console.log("Profile bio updated.");
   }
 
+  /**
+   * Sets the currently logged in user's website.
+   *
+   * @param url A valid URL to be the new website
+   */
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -1074,6 +1127,13 @@ export default class IGBot {
     console.log("Profile website updated.");
   }
 
+  /**
+   * Sets the currently logged in user's name.
+   *
+   * This is the name that will be displayed on the profile, not the username.
+   *
+   * @param name The new name
+   */
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -1097,6 +1157,19 @@ export default class IGBot {
     console.log("Profile name updated.");
   }
 
+  /**
+   * Sets the currently logged in user's username.
+   *
+   * Updates `this.username` when successful.
+   *
+   * Instagram usernames must follow these rules:
+   *  - Must be between 1 and 30 characters long, inclusive
+   *  - Must contain only letters, numbers, periods and underscores
+   *
+   * Usernames also cannot be changed too often.
+   *
+   * @param username The new username
+   */
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -1127,6 +1200,13 @@ export default class IGBot {
     console.log("Username updated.");
   }
 
+  /**
+   * Sets the currently logged in user's password.
+   *
+   * Updates `this.password` when successful.
+   *
+   * @param password The new password
+   */
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -1169,7 +1249,7 @@ export default class IGBot {
   @needsInit()
   @needsLogin()
   @makesBusy()
-  async saveProfileChanges(errorMsg: string) {
+  protected async saveProfileChanges(errorMsg: string) {
     console.log("Saving profile changes.");
 
     const submitButton = await this.waitForElementWithText("button", "Submit");
@@ -1193,6 +1273,11 @@ export default class IGBot {
   // Get Profile Details Methods
   //
 
+  /**
+   * Gets the profile details of the currently logged in user.
+   *
+   * @returns The profile details of the logged in user
+   */
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -1220,6 +1305,14 @@ export default class IGBot {
     };
   }
 
+  /**
+   * Gets wether the currently logged in user has chaining enabled.
+   *
+   * Chaining is a feature that allows your instagram account to be
+   * recommended to other users as suggestions of accounts to follow.
+   *
+   * @returns Wether chaining is enabled
+   */
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -1232,6 +1325,11 @@ export default class IGBot {
     return await input.checked;
   }
 
+  /**
+   * Gets the gender of the currently logged in user.
+   *
+   * @returns The gender of the currently logged in user
+   */
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -1244,6 +1342,11 @@ export default class IGBot {
     return <Profile["gender"]>String(await input.value);
   }
 
+  /**
+   * Gets the phone number of the currently logged in user.
+   *
+   * @returns The phone number of the currently logged in userq
+   */
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -1256,6 +1359,11 @@ export default class IGBot {
     return String(await input.value);
   }
 
+  /**
+   * Gets the email of the currently logged in user.
+   *
+   * @returns The email of the currently logged in user
+   */
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -1268,6 +1376,11 @@ export default class IGBot {
     return String(await input.value);
   }
 
+  /**
+   * Gets the bio of the currently logged in user.
+   *
+   * @returns The bio of the currently logged in user
+   */
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -1280,6 +1393,11 @@ export default class IGBot {
     return String(await textarea.value);
   }
 
+  /**
+   * Gets the website of the currently logged in user.
+   *
+   * @returns The website of the currently logged in user
+   */
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -1292,6 +1410,13 @@ export default class IGBot {
     return String(await input.value);
   }
 
+  /**
+   * Gets the name of the currently logged in user.
+   *
+   * This is the name that is displayed on the profile, not the username.
+   *
+   * @returns The name of the currently logged in user
+   */
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -1304,10 +1429,20 @@ export default class IGBot {
     return String(await input.value);
   }
 
+  /**
+   * Gets the username set on this {@link IGBot} instance.
+   *
+   * @returns `this.username`
+   */
   getUsername(): Profile["username"] {
     return this.username;
   }
 
+  /**
+   * Gets the password set on this {@link IGBot} instance.
+   *
+   * @returns `this.password`
+   */
   getPassword(): Profile["password"] {
     return this.password;
   }
@@ -1661,11 +1796,11 @@ export default class IGBot {
     await this.hero.waitForLoad(status);
   }
 
-  private getUrl(path: string) {
+  protected getUrl(path: string) {
     return new URL(path, this.baseInstagramUrl.origin);
   }
 
-  private getHref(path: string) {
+  protected getHref(path: string) {
     return this.getUrl(path).href;
   }
 }
