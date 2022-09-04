@@ -105,6 +105,103 @@ export default class IGBot {
   //
 
   /**
+   * Unsaves a post.
+   *
+   * @param post The post to unsave
+   */
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
+  async unsavePost(post: PostIdentifer) {
+    const id = usePostIdentifierToId(post);
+    const url = this.getHref(`/p/${id}/`);
+
+    console.log(`Unsaving post '${id}'.`);
+
+    await this.goto(url, true);
+
+    // check if post is already saved
+    this.isBusy = false;
+    if (!(await this.isPostSaved(post))) {
+      console.log("Post is already not saved.");
+      return;
+    }
+    this.isBusy = true;
+
+    // click unsave button
+    const unsaveButtonIcon = await this.waitForElement("article section [aria-label='Remove']");
+    const unsaveButton = await unsaveButtonIcon.parentElement.parentElement;
+    await this.hero.click(unsaveButton);
+
+    // wait for post to be saved
+    await this.hero.waitForResource({
+      url: /instagram.com\/web\/save\/(.*)\/unsave\//,
+      type: "XHR",
+    });
+
+    console.log(`Unsaved post.`);
+  }
+
+  /**
+   * Saves a post.
+   *
+   * @param post The post to save
+   */
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
+  async savePost(post: PostIdentifer) {
+    const id = usePostIdentifierToId(post);
+    const url = this.getHref(`/p/${id}/`);
+
+    console.log(`Saving post '${id}'.`);
+
+    await this.goto(url, true);
+
+    // check if post is already saved
+    this.isBusy = false;
+    if (await this.isPostSaved(post)) {
+      console.log("Post is already saved.");
+      return;
+    }
+    this.isBusy = true;
+
+    // click save button
+    const saveButtonIcon = await this.waitForElement("[aria-label='Save']");
+    const saveButton = await saveButtonIcon.parentElement.parentElement;
+    await this.hero.click(saveButton);
+
+    // wait for post to be saved
+    await this.hero.waitForResource({
+      url: /instagram.com\/web\/save\/(.*)\/save\//,
+      type: "XHR",
+    });
+
+    console.log(`Saved post.`);
+  }
+
+  /**
+   * Gets wether a post is saved by the currently logged in user.
+   *
+   * @param post The post to check if it is saved
+   * @returns Whether the post is saved
+   */
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
+  async isPostSaved(post: PostIdentifer) {
+    const id = usePostIdentifierToId(post);
+    const url = this.getHref(`/p/${id}/`);
+
+    await this.goto(url, true);
+
+    return (await this.waitForElement("[aria-label='Save']", 2e3).catch(() => null)) === null;
+  }
+
+  /**
    * Shares a post.
    *
    * @param post The post to share
@@ -256,7 +353,10 @@ export default class IGBot {
     await this.goto(url, true);
 
     this.isBusy = false;
-    if (!(await this.isPostLiked(post))) return;
+    if (!(await this.isPostLiked(post))) {
+      console.log("Post is already not liked.");
+      return;
+    }
     this.isBusy = true;
 
     // click unlike button
@@ -291,7 +391,10 @@ export default class IGBot {
     await this.goto(url, true);
 
     this.isBusy = false;
-    if (await this.isPostLiked(post)) return;
+    if (await this.isPostLiked(post)) {
+      console.log("Post is already liked.");
+      return;
+    }
     this.isBusy = true;
 
     // click the like button
