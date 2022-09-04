@@ -105,6 +105,88 @@ export default class IGBot {
   //
 
   /**
+   * Shares a post.
+   *
+   * @param post The post to share
+   * @param user The username of the user or users to share the post with
+   */
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
+  async sharePost(post: PostIdentifer, user: string | string[], message?: string) {
+    const id = usePostIdentifierToId(post);
+    const url = this.getHref(`/p/${id}/`);
+
+    console.log(`Sharing post '${id}' with user(s) '${user}'.`);
+
+    await this.goto(url, true);
+
+    // click share button
+    const shareButtonIcon = await this.waitForElement("[aria-label='Share Post']");
+    const shareButton = await shareButtonIcon.parentElement.parentElement;
+    await this.hero.click(shareButton);
+
+    // wait for share dialog to open
+    const dialogSelector = "[role='dialog']";
+    await this.waitForElement(dialogSelector);
+
+    const usernames = typeof user === "string" ? [user] : [...user];
+
+    // add usernames to share
+    for (const username of usernames) {
+      const usernameInput = await this.waitForElement(`${dialogSelector} input[name='queryBox']`);
+      await this.hero.click(usernameInput);
+      await this.hero.type(username);
+
+      // wait for loading to complete
+      await this.waitForElement(
+        `${dialogSelector} [data-visualcompletion='loading-state']`,
+        2e3,
+      ).catch(() => null);
+      await this.waitForNoElement(
+        `${dialogSelector} [data-visualcompletion='loading-state']`,
+        60e3,
+      );
+
+      // check for no accounts found
+      const noAccountsFound =
+        (await this.waitForElementWithText(`${dialogSelector} div`, "No account found.", 1e3).catch(
+          () => null,
+        )) !== null;
+      if (noAccountsFound) {
+        throw new Error(`No account found for username '${username}' when trying to share post.`);
+      }
+
+      const topMatchUser = await this.waitForElement(`${dialogSelector} div[role='button']`);
+      await this.hero.click(topMatchUser);
+    }
+
+    // write message
+    if (message) {
+      const messageInput = await this.waitForElement(
+        `${dialogSelector} input[name='shareCommentText']`,
+      );
+      await this.hero.click(messageInput);
+      await this.hero.type(message);
+    }
+
+    // click send button
+    const sendButton = await this.waitForElementWithText(`${dialogSelector} button`, "Send");
+    await this.hero.click(sendButton);
+
+    // wait for sent
+    const messageToast = await this.getMessageToast(120e3);
+    if (!messageToast) {
+      throw new Error(`Failed to share post, timed out waiting for share to complete.`);
+    } else if (!(await messageToast.innerText).includes("Sent")) {
+      throw new Error(`Failed to share post.\nInstagramError: ${await messageToast.innerText}`);
+    }
+
+    console.log(`Shared post '${id}' with user(s) '${user}'.`);
+  }
+
+  /**
    * Comments on a post.
    *
    * @param post The post to comment on.
@@ -178,7 +260,7 @@ export default class IGBot {
     this.isBusy = true;
 
     // click unlike button
-    const unlikeButtonIcon = await this.waitForElement("[aria-label='Unlike']");
+    const unlikeButtonIcon = await this.waitForElement("article section [aria-label='Unlike']");
     const unlikeButton = await unlikeButtonIcon.parentElement.parentElement;
     await this.hero.click(unlikeButton);
 
@@ -213,7 +295,7 @@ export default class IGBot {
     this.isBusy = true;
 
     // click the like button
-    const likeButtonIcon = await this.waitForElement("[aria-label='Like']");
+    const likeButtonIcon = await this.waitForElement("article section [aria-label='Like']");
     const likeButton = await likeButtonIcon.parentElement.parentElement;
     await this.hero.click(likeButton);
 
@@ -242,7 +324,10 @@ export default class IGBot {
 
     await this.goto(url, true);
 
-    return (await this.waitForElement("[aria-label='Like']")) === null;
+    return (
+      (await this.waitForElement("article section [aria-label='Like']", 2e3).catch(() => null)) ===
+      null
+    );
   }
 
   /**
@@ -1243,10 +1328,10 @@ export default class IGBot {
   }
 
   @needsInit()
-  protected async getMessageToast(): Promise<ISuperHTMLElement | null> {
+  protected async getMessageToast(timeToWaitMs = 1e3): Promise<ISuperHTMLElement | null> {
     const toastMessage = await this.waitForElement(
       "body div > div > div > div > div > p",
-      1e3,
+      timeToWaitMs,
     ).catch(() => null);
 
     return toastMessage;

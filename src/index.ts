@@ -15,7 +15,8 @@ async function main() {
   const recentPost = await bot.getRecentPost("_brandontang_");
   console.log(await bot.getPost(recentPost.id));
   await bot.likePost(recentPost);
-  await bot.commentPost(recentPost, "That was sick as bro 🔥");
+  // await bot.commentPost(recentPost, "That was sick as bro 🔥");
+  await bot.sharePost(recentPost, ["xd.freddie"], "That was sick as bro 🔥");
   // console.log(await bot.getPinnedPosts("_brandontang_"));
   // await bot.post("../test-post-video-0.mp4", {
   //   caption: "what an awesome funny meme video",
