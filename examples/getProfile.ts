@@ -1,4 +1,4 @@
-import IGBot from "@/igBot";
+import IGBot from "@lib/igBot";
 import { Example } from "./example";
 
 const getProfile: Example = async (username, password) => {
