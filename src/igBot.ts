@@ -18,6 +18,7 @@ import { useValidateEmail } from "./utils/useValidateEmail";
 import { useValidatePath } from "./utils/useValidatePath";
 import { useValidInstagramMedia } from "./utils/useValidInstagramMedia";
 import { useValidURL } from "./utils/useValidURL";
+import { Comment } from "./comment";
 
 export interface PostOptions {
   caption?: string;
@@ -435,6 +436,94 @@ export default class IGBot {
       (await this.waitForElement("article section [aria-label='Like']", 2e3).catch(() => null)) ===
       null
     );
+  }
+
+  /**
+   * Gets the comments of a post.
+   *
+   * TODO: Implement getting replies of comments.
+   *
+   * @param identifier The identifier of the post.
+   * @param count The number of comments to get.
+   * @param getReplies Wether to get the replies of the comments. @default false
+   * @returns An array of comments.
+   */
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
+  async getPostComments(
+    identifier: PostIdentifer,
+    count: number,
+    getReplies = false,
+  ): Promise<Comment[]> {
+    const id = usePostIdentifierToId(identifier);
+    const url = this.getHref(`/p/${id}/`);
+
+    console.log(`Getting comments for post '${id}'.`);
+
+    await this.goto(url, true);
+
+    // get comments
+    const comments: Comment[] = [];
+    const postContainerSelector = "section article";
+
+    let commentElements: ISuperHTMLElement[] = [];
+    const moreCommentsButtonSelector = `${postContainerSelector} svg[aria-label='Load more comments']`;
+    const moreCommentsLoadingSelector = `${postContainerSelector} ul [data-visualcompletion='loading-state']`;
+
+    do {
+      if (comments.length !== 0) {
+        // try to load more comments
+        const moreCommentsButton = await this.waitForElement(moreCommentsButtonSelector);
+        if (moreCommentsButton) {
+          await this.hero.click(moreCommentsButton);
+          await this.waitForElement(moreCommentsLoadingSelector);
+          await this.waitForNoElement(moreCommentsLoadingSelector);
+        }
+      }
+
+      // get comment elements
+      await this.waitForElement(`${postContainerSelector} ul > ul`); // make sure comments are loaded
+      commentElements = Array.from(
+        await this.hero.querySelectorAll(`${postContainerSelector} ul > ul`),
+      );
+
+      // remove comments that have already been added
+      commentElements = commentElements.slice(comments.length);
+
+      for (const commentElement of commentElements) {
+        const commentInfoElement = (await commentElement.children[0]).querySelector(
+          "li > div > div > :nth-child(2)",
+        );
+
+        const commentPosterElement = await commentInfoElement.children[0];
+        const commentTextElement = await commentInfoElement.children[1];
+
+        const commentExtraElement = await (await commentInfoElement.children[2]).children[0];
+        const commentTimestampElement = await commentExtraElement.querySelector("time");
+        const commentLikeElement = await (await commentExtraElement.children[1]).children[0];
+
+        const comment: Comment = {
+          poster: String(await commentPosterElement.textContent).trim(),
+          text: String(await commentTextElement.textContent).trim(),
+          timestamp: new Date(
+            String(await commentTimestampElement.getAttribute("datetime")),
+          ).getTime(),
+          likes: Number(
+            String(await commentLikeElement.textContent)
+              .replace(/(likes)|(like)/, "")
+              .trim()
+              .replace(",", ""),
+          ),
+          replies: [],
+        };
+        comments.push(comment);
+      }
+    } while (comments.length < count && commentElements.length > 0);
+
+    console.log(`Got ${comments.length} comments for post '${id}'.`);
+    return comments.slice(0, count);
   }
 
   /**
