@@ -455,7 +455,7 @@ export default class IGBot {
   /**
    * Gets the comments of a post.
    *
-   * TODO: Implement getting replies of comments.
+   * TODO: Maybe add a way to get replies to comments.
    *
    * @param identifier The identifier of the post.
    * @param count The number of comments to get.
@@ -466,11 +466,7 @@ export default class IGBot {
   @needsInit()
   @needsLogin()
   @makesBusy()
-  async getPostComments(
-    identifier: PostIdentifer,
-    count: number,
-    getReplies = false,
-  ): Promise<Comment[]> {
+  async getComments(identifier: PostIdentifer, count: number): Promise<Comment[]> {
     const id = usePostIdentifierToId(identifier);
     const url = this.getHref(`/p/${id}/`);
 
@@ -489,9 +485,12 @@ export default class IGBot {
     do {
       if (comments.length !== 0) {
         // try to load more comments
-        const moreCommentsButton = await this.waitForElement(moreCommentsButtonSelector);
+        const moreCommentsButton = await this.waitForElement(moreCommentsButtonSelector)
+          .then((el) => el.parentElement)
+          .then((el) => el.parentElement);
+
         if (moreCommentsButton) {
-          await this.hero.click(moreCommentsButton);
+          await moreCommentsButton.click();
           await this.waitForElement(moreCommentsLoadingSelector);
           await this.waitForNoElement(moreCommentsLoadingSelector);
         }
@@ -511,7 +510,9 @@ export default class IGBot {
           "li > div > div > :nth-child(2)",
         );
 
-        const commentPosterElement = await commentInfoElement.children[0];
+        const commentPosterElement = await (
+          await commentInfoElement.children[0]
+        ).querySelector("a");
         const commentTextElement = await commentInfoElement.children[1];
 
         const commentExtraElement = await (await commentInfoElement.children[2]).children[0];
@@ -530,7 +531,6 @@ export default class IGBot {
               .trim()
               .replace(",", ""),
           ),
-          replies: [],
         };
         comments.push(comment);
       }

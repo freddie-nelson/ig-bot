@@ -6,11 +6,11 @@ const getComments: Example = async (username, password) => {
   await bot.init();
   await bot.login();
 
-  const user = "simpkingmemes.v2";
+  const user = "kanyewest";
   console.log(`Getting comments from most recent post of '${user}'.`);
 
   const post = await bot.getRecentPost(user);
-  const comments = await bot.getPostComments(post.id, 10, true);
+  const comments = await bot.getComments(post.id, 30);
 
   console.log(JSON.stringify(comments, null, 2));
   console.log(`Got ${comments.length} comments.`);
