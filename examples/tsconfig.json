@@ -2,15 +2,22 @@
   "compilerOptions": {
     "module": "CommonJS",
     "noImplicitAny": true,
-    "outDir": ".",
     "sourceMap": true,
     "rootDir": ".",
     "baseUrl": ".",
     "target": "es6",
     "moduleResolution": "node",
     "esModuleInterop": true,
-    "experimentalDecorators": true
+    "experimentalDecorators": true,
+    "paths": {
+      "@/*": ["../src/*"],
+      "@lib/*": ["../src/*"]
+    }
   },
-  "include": ["*.ts"],
-  "exclude": ["node_modules"]
+  "references": [
+    {
+      "path": "../src"
+    }
+  ],
+  "include": ["**/*.ts"]
 }

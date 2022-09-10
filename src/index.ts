@@ -6,6 +6,7 @@ dotenv.config();
 async function main() {
   const username = process.env.INSTA_USERNAME;
   const password = process.env.INSTA_PASSWORD;
+  if (!username || !password) throw new Error("Username or password not set.");
 
   const bot = new IGBot(username, password, true);
   await bot.init();

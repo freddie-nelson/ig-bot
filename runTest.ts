@@ -1,6 +1,4 @@
-import { createReadStream } from "fs";
-import { stdout } from "process";
-import { Duplex, PassThrough } from "stream";
+import { spawn } from "child_process";
 import { availableExamples, runExample, validateExample } from "./exampleRunner";
 
 const availableTests = ["all", ...availableExamples];
@@ -28,36 +26,40 @@ const validateTest = (test: string) => {
 const test = validateTest(process.argv[2] || "all");
 
 const runTest = async (test: string) => {
-  console.log(`🟦 Running test '${test}'...`);
+  const title = `\n🟦 Running test '${test}'...\n`;
+  console.log(title);
 
-  let success = false;
-  let linesPrinted = 0;
+  let errors = "";
 
-  const log = console.log;
-  console.log = (...args: any[]) => {
-    linesPrinted += `${args.reduce((acc, a) => acc + " " + a.toString(), "")}`.split("\n").length;
-    log(linesPrinted);
+  const success = await new Promise<boolean>((resolve) => {
+    const exampleProc = spawn(
+      "node",
+      ["-r", "tsconfig-paths/register", "-r", "ts-node/register", "runExample.ts", test],
+      { env: { ...process.env, TS_NODE_PROJECT: "examples/tsconfig.json" } },
+    );
+    exampleProc.on("exit", (code) => {
+      resolve(code === 0);
+    });
 
-    log(...args);
-  };
+    exampleProc.stdout.pipe(process.stdout);
+    exampleProc.stderr.pipe(process.stderr);
 
-  try {
-    await runExample(test);
-    success = true;
-  } catch (error) {
-    console.error(error);
-  }
+    // keep errors in memory so we can print them after the test is done
+    exampleProc.stderr.on("data", (data) => {
+      errors += String(data);
+    });
+  });
 
-  // clear lines printed by test
-  console.log = log;
+  // clear console and scroll buffer
+  clearConsoleAndScrollBuffer();
 
-  for (let i = 0; i < linesPrinted; i++) {
-    process.stdout.moveCursor(0, -1);
-    process.stdout.clearLine(1);
-  }
+  // reprint title and errors
+  console.log(title);
+  console.log(errors);
 
-  if (success) console.log(`🟩 Test '${test}' passed.`);
-  else console.log(`🟥 Test '${test}' failed, see above output for more information.`);
+  // print footer
+  if (success) console.log(`\n🟩 Test '${test}' passed.`);
+  else console.log(`\n🟥 Test '${test}' failed, see above output for more information.`);
 
   return success;
 };
@@ -66,10 +68,13 @@ const runTest = async (test: string) => {
   const tests = test === "all" ? [...availableExamples] : [test];
 
   let passedCount = 0;
+  const failedTests: string[] = [];
+
   for (const test of tests) {
     const passed = await runTest(test);
 
     if (passed) console.log(`Passed ${++passedCount} of ${tests.length} tests.`);
+    else failedTests.push(test);
   }
 
   if (passedCount === tests.length) {
@@ -77,7 +82,13 @@ const runTest = async (test: string) => {
   } else {
     console.log(`🟥 ${passedCount} of ${tests.length} tests passed.`);
     console.log(
-      `🟥 ${tests.length - passedCount} tests failed, check the above output for more information.`,
+      `🟥 ${tests.length - passedCount} tests failed, check below for the tests that failed.`,
     );
+    console.log(`🟥 Failed tests: ${failedTests.join(", ")}`);
   }
 })();
+
+function clearConsoleAndScrollBuffer() {
+  process.stdout.write("\u001b[3J\u001b[1J");
+  console.clear();
+}

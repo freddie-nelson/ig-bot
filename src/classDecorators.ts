@@ -19,14 +19,15 @@ export const gracefulHeroClose = () => {
     const originalFunc = descriptor.value;
 
     descriptor.value = async function (...args: any[]) {
-      if (!this.hero || !(this.hero instanceof Hero))
-        throw new Error("Hero instance does not exist on target.");
+      if (!this.close || typeof this.close !== "function") {
+        throw new Error("Object does not have a close function.");
+      }
 
       try {
-        return originalFunc.apply(this, args);
+        const returnValue = await originalFunc.apply(this, args);
+        return returnValue;
       } catch (error) {
         await this.close();
-        console.log("Closed hero instance.");
         throw error;
       }
     };

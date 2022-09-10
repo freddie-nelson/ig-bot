@@ -1,4 +1,4 @@
-import IGBot from "@/igBot";
+import IGBot from "@lib/igBot";
 import { Example } from "./example";
 
 const postVideo: Example = async (username, password) => {

@@ -14,7 +14,7 @@
     "prettier": "prettier --config .prettierrc --write .",
     "test:watch": "jest --watch",
     "prepare": "husky install",
-    "example": "node -r tsconfig-paths/register -r ts-node/register runExample.ts",
+    "example": "ts-node --project examples/tsconfig.json -r tsconfig-paths/register runExample.ts",
     "test": "node -r tsconfig-paths/register -r ts-node/register runTest.ts"
   },
   "dependencies": {

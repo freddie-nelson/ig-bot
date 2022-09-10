@@ -1,5 +1,6 @@
 import { readdirSync } from "fs";
 import { config } from "dotenv";
+import { resolve } from "path";
 config();
 
 export const availableExamples = readdirSync("examples")
@@ -18,7 +19,7 @@ export const validateExample = (example: string) => {
 };
 
 export const runExample = async (example: string) => {
-  const examplePath = `examples/${example}.ts`;
+  const examplePath = resolve(__dirname, `examples/${example}.ts`);
   const exampleFunc = (await import(examplePath))?.default;
 
   if (!exampleFunc) {

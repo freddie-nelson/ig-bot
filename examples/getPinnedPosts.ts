@@ -1,4 +1,4 @@
-import IGBot from "@/igBot";
+import IGBot from "@lib/igBot";
 import { Example } from "./example";
 
 const getPinnedPosts: Example = async (username, password) => {

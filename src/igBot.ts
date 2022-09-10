@@ -4,6 +4,7 @@ import Server from "@ulixee/server";
 import { Post, PostIdentifer, PostInfo } from "./post";
 import {
   createFlagDecorator,
+  gracefulHeroClose,
   makesBusy,
   needsFree,
   needsInit,
@@ -93,16 +94,21 @@ export default class IGBot {
    *
    * The client will need to be reinitialized before it can be used again.
    */
-  @needsInit()
-  @needsFree()
-  @makesBusy()
   async close() {
+    if (!this.isInitialised) return;
+    if (this.isBusy) console.warn("WARN: Closing while busy may cause unexpected behaviour.");
+
+    console.log("Closing instagram client.");
+
     await this.hero.close();
     await this.core.close();
+    this.hero = undefined;
+    this.core = undefined;
 
     this.isInitialised = false;
     this.isLoggedIn = false;
-    this.isBusy = false;
+
+    console.log("Closed instagram client.");
   }
 
   //
@@ -114,6 +120,7 @@ export default class IGBot {
    *
    * @param post The post to unsave
    */
+  @gracefulHeroClose()
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -153,6 +160,7 @@ export default class IGBot {
    *
    * @param post The post to save
    */
+  @gracefulHeroClose()
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -193,6 +201,7 @@ export default class IGBot {
    * @param post The post to check if it is saved
    * @returns Whether the post is saved
    */
+  @gracefulHeroClose()
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -212,6 +221,7 @@ export default class IGBot {
    * @param post The post to share
    * @param user The username of the user or users to share the post with
    */
+  @gracefulHeroClose()
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -293,6 +303,7 @@ export default class IGBot {
    *
    * @param post The post to comment on.
    */
+  @gracefulHeroClose()
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -345,6 +356,7 @@ export default class IGBot {
    *
    * @param post The post to unlike.
    */
+  @gracefulHeroClose()
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -383,6 +395,7 @@ export default class IGBot {
    *
    * @param post The identifier of the post to like.
    */
+  @gracefulHeroClose()
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -422,6 +435,7 @@ export default class IGBot {
    * @param post The identifier of the post.
    * @returns Whether the post is liked.
    */
+  @gracefulHeroClose()
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -531,6 +545,7 @@ export default class IGBot {
    *
    * @param identifier The identifier of the post to get.
    */
+  @gracefulHeroClose()
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -668,6 +683,7 @@ export default class IGBot {
    *
    * @returns An array of {@link PostInfo} objects for each post.
    */
+  @gracefulHeroClose()
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -777,6 +793,7 @@ export default class IGBot {
    * @param content The content to post, an array of values will be posted as a slideshow
    * @param caption The caption to add to the post, default is no caption.
    */
+  @gracefulHeroClose()
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -912,6 +929,7 @@ export default class IGBot {
   /**
    * Logs in to Instagram using `this.username` and `this.password`.
    */
+  @gracefulHeroClose()
   @needsFree()
   @needsInit()
   @makesBusy()
@@ -970,6 +988,7 @@ export default class IGBot {
     this.isBusy = true;
   }
 
+  @gracefulHeroClose()
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -994,6 +1013,7 @@ export default class IGBot {
    *
    * @param profile The profile details to set
    */
+  @gracefulHeroClose()
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -1027,6 +1047,7 @@ export default class IGBot {
    *
    * @param chaining Whether to enable chaining
    */
+  @gracefulHeroClose()
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -1061,6 +1082,7 @@ export default class IGBot {
    */
   async setGender(gender: ProfileGender.CUSTOM, customGender: string): Promise<void>;
 
+  @gracefulHeroClose()
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -1111,6 +1133,7 @@ export default class IGBot {
    *
    * @param phoneNo The new phone number
    */
+  @gracefulHeroClose()
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -1137,6 +1160,7 @@ export default class IGBot {
    *
    * @param email The new email
    */
+  @gracefulHeroClose()
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -1165,6 +1189,7 @@ export default class IGBot {
    *
    * @param bio The new bio
    */
+  @gracefulHeroClose()
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -1193,6 +1218,7 @@ export default class IGBot {
    *
    * @param url A valid URL to be the new website
    */
+  @gracefulHeroClose()
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -1223,6 +1249,7 @@ export default class IGBot {
    *
    * @param name The new name
    */
+  @gracefulHeroClose()
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -1259,6 +1286,7 @@ export default class IGBot {
    *
    * @param username The new username
    */
+  @gracefulHeroClose()
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -1296,6 +1324,7 @@ export default class IGBot {
    *
    * @param password The new password
    */
+  @gracefulHeroClose()
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -1335,6 +1364,7 @@ export default class IGBot {
     console.log("Password updated.");
   }
 
+  @gracefulHeroClose()
   @needsInit()
   @needsLogin()
   @makesBusy()
@@ -1367,6 +1397,7 @@ export default class IGBot {
    *
    * @returns The profile details of the logged in user
    */
+  @gracefulHeroClose()
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -1402,6 +1433,7 @@ export default class IGBot {
    *
    * @returns Wether chaining is enabled
    */
+  @gracefulHeroClose()
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -1419,6 +1451,7 @@ export default class IGBot {
    *
    * @returns The gender of the currently logged in user
    */
+  @gracefulHeroClose()
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -1436,6 +1469,7 @@ export default class IGBot {
    *
    * @returns The phone number of the currently logged in userq
    */
+  @gracefulHeroClose()
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -1453,6 +1487,7 @@ export default class IGBot {
    *
    * @returns The email of the currently logged in user
    */
+  @gracefulHeroClose()
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -1470,6 +1505,7 @@ export default class IGBot {
    *
    * @returns The bio of the currently logged in user
    */
+  @gracefulHeroClose()
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -1487,6 +1523,7 @@ export default class IGBot {
    *
    * @returns The website of the currently logged in user
    */
+  @gracefulHeroClose()
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -1506,6 +1543,7 @@ export default class IGBot {
    *
    * @returns The name of the currently logged in user
    */
+  @gracefulHeroClose()
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -1540,8 +1578,6 @@ export default class IGBot {
   // Get Profile Elements Methods
   //
 
-  @needsInit()
-  @needsLogin()
   protected async getChainingElement() {
     const input = await this.waitForElement("#pepChainingEnabled input[type='checkbox']");
     const element = await this.waitForElement("#pepChainingEnabled label div");
@@ -1580,6 +1616,7 @@ export default class IGBot {
     return await this.waitForElement("#pepUsername");
   }
 
+  @gracefulHeroClose()
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -1596,6 +1633,7 @@ export default class IGBot {
     await this.waitForNavigation();
   }
 
+  @gracefulHeroClose()
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -1628,6 +1666,7 @@ export default class IGBot {
     console.log("Declined notifications.");
   }
 
+  @gracefulHeroClose()
   @needsInit()
   protected async acceptCookieConsent() {
     await this.hero.waitForPaintingStable();
@@ -1654,6 +1693,7 @@ export default class IGBot {
     console.log("Accepted cookies.");
   }
 
+  @gracefulHeroClose()
   @needsInit()
   protected async getMessageToast(timeToWaitMs = 1e3): Promise<ISuperHTMLElement | null> {
     const toastMessage = await this.waitForElement(
@@ -1664,11 +1704,13 @@ export default class IGBot {
     return toastMessage;
   }
 
+  @gracefulHeroClose()
   @needsInit()
   protected async isPageNotFound() {
     return (await this.document.title) === "Page Not Found • Instagram";
   }
 
+  @gracefulHeroClose()
   protected async repeatKey(key: ITypeInteraction, count: number) {
     for (let i = 0; i < count; i++) {
       await this.hero.type(key);
@@ -1681,6 +1723,7 @@ export default class IGBot {
    *
    * Make sure you have a focused element before calling this.
    */
+  @gracefulHeroClose()
   @needsInit()
   protected async clearInput() {
     // select all text in input
@@ -1691,6 +1734,7 @@ export default class IGBot {
     await this.hero.type(KeyboardKey.Backspace);
   }
 
+  @gracefulHeroClose()
   @needsInit()
   protected async waitForNoElementWithText(
     selector: string,
@@ -1709,6 +1753,7 @@ export default class IGBot {
     );
   }
 
+  @gracefulHeroClose()
   @needsInit()
   protected async waitForElementWithText(
     selector: string,
@@ -1727,6 +1772,7 @@ export default class IGBot {
     );
   }
 
+  @gracefulHeroClose()
   @needsInit()
   protected async findElementWithText(
     selector: string,
@@ -1754,6 +1800,7 @@ export default class IGBot {
     return null;
   }
 
+  @gracefulHeroClose()
   @needsInit()
   protected async waitForNoElement(selector: string, timeout?: number, checksIntervalMs?: number) {
     console.log(`Waiting for no element to exist with selector '${selector}'.`);
@@ -1765,6 +1812,7 @@ export default class IGBot {
     );
   }
 
+  @gracefulHeroClose()
   @needsInit()
   protected async waitForElement(selector: string, timeout?: number, checksIntervalMs?: number) {
     console.log(`Waiting for element with selector '${selector}' to exist.`);
@@ -1783,6 +1831,8 @@ export default class IGBot {
    * @param checksIntervalMs The time in ms between value checks
    * @returns The last value returned from waitForValue
    */
+  @gracefulHeroClose()
+  @needsInit()
   protected async waitFor<T>(
     waitForValue: () => Promise<T>,
     timeout = 10e3,
@@ -1812,6 +1862,7 @@ export default class IGBot {
     });
   }
 
+  @gracefulHeroClose()
   @needsInit()
   protected async querySelector(selector: string, silent = false) {
     if (!silent) console.log(`Selecting element '${selector}'.`);
@@ -1825,6 +1876,7 @@ export default class IGBot {
     return element;
   }
 
+  @gracefulHeroClose()
   @needsInit()
   protected async goto(href: string, skipIfAlreadyOnUrl = false, waitForStatus?: LoadStatus) {
     const url = useValidURL(href);
@@ -1859,6 +1911,7 @@ export default class IGBot {
    * @param trigger The waitForLocation trigger
    * @param status The waitForLoad status to wait for from the page
    */
+  @gracefulHeroClose()
   @needsInit()
   protected async waitForNavigationConditional(
     match: string,
@@ -1874,12 +1927,14 @@ export default class IGBot {
    * @param trigger The waitForLocation trigger
    * @param status The waitForLoad status to wait for from the page
    */
+  @gracefulHeroClose()
   @needsInit()
   protected async waitForNavigation(trigger: "change" | "reload" = "change", status?: LoadStatus) {
     await this.hero.waitForLocation(trigger);
     await this.waitForLoad(status);
   }
 
+  @gracefulHeroClose()
   @needsInit()
   protected async waitForLoad(status: LoadStatus = LoadStatus.AllContentLoaded) {
     await this.hero.waitForLoad(status);
