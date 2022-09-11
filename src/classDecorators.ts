@@ -6,10 +6,12 @@ export const makesBusy = () => {
 
     descriptor.value = async function (...args: any[]) {
       this.isBusy = true;
-      const returnVal = await originalFunc.apply(this, args);
-      this.isBusy = false;
-
-      return returnVal;
+      try {
+        const returnVal = await originalFunc.apply(this, args);
+        return returnVal;
+      } finally {
+        this.isBusy = false;
+      }
     };
   };
 };

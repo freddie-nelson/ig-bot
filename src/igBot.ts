@@ -1644,7 +1644,7 @@ export default class IGBot {
 
     console.log("Checking for notifications consent modal.");
     const notificationsModalSelector = "div[role='dialog']";
-    const notificationsModal = this.waitForElement(notificationsModalSelector, 5e3).catch(
+    const notificationsModal = await this.waitForElement(notificationsModalSelector, 3e3).catch(
       () => null,
     );
 
@@ -1653,7 +1653,7 @@ export default class IGBot {
       return;
     }
 
-    const declineButton = await this.waitForElementWithText("button", "not now", 10e3).catch(
+    const declineButton = await this.waitForElementWithText("button", "not now", 3e3).catch(
       () => null,
     );
     if (!declineButton) {
