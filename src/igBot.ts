@@ -659,7 +659,7 @@ export default class IGBot {
     const lastCommandId = await this.hero.lastCommandId;
     await this.goto(this.baseInstagramUrl.href);
 
-    const posts: string[] = [];
+    let posts: string[] = [];
 
     while (posts.length < count) {
       // load more posts
@@ -686,7 +686,7 @@ export default class IGBot {
       console.log(`${posts.length} posts found...`);
     }
 
-    posts.slice(0, count);
+    posts = posts.slice(0, count);
     console.log(`Got ${posts.length} posts from feed.`);
 
     return posts;
