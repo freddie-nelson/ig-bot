@@ -37,6 +37,7 @@ export default class IGBot {
   protected onetapLoginUrl = this.getUrl("/accounts/onetap");
   protected editAccountUrl = this.getUrl("/accounts/edit");
   protected changePasswordUrl = this.getUrl("/accounts/password/change");
+  protected feedApiUrl = new URL("https://i.instagram.com/api/v1/feed/timeline/");
 
   protected core: Server;
   protected hero: Hero;
@@ -644,6 +645,51 @@ export default class IGBot {
     //   isVideo: false,
     //   views: undefined,
     // };
+  }
+
+  /**
+   * Gets the ids of posts from the logged in users main feed.
+   *
+   * @param count The number of posts to get.
+   * @returns The IDs of the posts.
+   */
+  async getFeed(count: number): Promise<PostIdentifer[]> {
+    console.log(`Getting ${count} posts from feed.`);
+
+    const lastCommandId = await this.hero.lastCommandId;
+    await this.goto(this.baseInstagramUrl.href);
+
+    const posts: string[] = [];
+
+    while (posts.length < count) {
+      // load more posts
+      if (posts.length > 0) {
+        console.log("Loading more posts.");
+        await this.hero.scrollTo([0, await this.document.body.scrollHeight]);
+      }
+
+      const result = await this.hero
+        .waitForResource(
+          { url: this.feedApiUrl.href, type: "XHR" },
+          { timeoutMs: 30e3, sinceCommandId: lastCommandId },
+        )
+        .then((resource) => resource.response)
+        .then((response) => response.json);
+
+      const ids = result?.feed_items.map((item: any) => item?.media_or_ad?.code);
+      if (!ids || ids.length === 0) {
+        console.log("No more posts in feed.");
+        break;
+      }
+
+      posts.push(...ids);
+      console.log(`${posts.length} posts found...`);
+    }
+
+    posts.slice(0, count);
+    console.log(`Got ${posts.length} posts from feed.`);
+
+    return posts;
   }
 
   /**
