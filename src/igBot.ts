@@ -584,19 +584,21 @@ export default class IGBot {
       media = info.image_versions2.candidates[0].url;
     }
 
-    console.log("Got post info.");
-
-    return {
+    const post: Post = {
       id,
       url,
-      username: info.user.username,
-      caption: info.caption.text,
-      likes: info.like_count,
+      username: info?.user?.username || "",
+      caption: info?.caption?.text || "",
+      likes: info?.like_count,
       isSlideshow,
       isVideo,
       media,
       views: info?.view_count,
     };
+
+    console.log("Got post info.");
+
+    return post;
 
     // GET POST INFO FROM SCRAPING
 
