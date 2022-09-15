@@ -20,6 +20,7 @@ import { useValidatePath } from "./utils/useValidatePath";
 import { useValidInstagramMedia } from "./utils/useValidInstagramMedia";
 import { useValidURL } from "./utils/useValidURL";
 import { Comment } from "./comment";
+import { User } from "./user";
 
 export interface PostOptions {
   caption?: string;
@@ -1050,6 +1051,60 @@ export default class IGBot {
 
     this.isLoggedIn = false;
     console.log("Logged out.");
+  }
+
+  //
+  // User Methods
+  //
+
+  /**
+   * Gets the details of a user.
+   *
+   * These details include the user's name, bio, followers, following, and posts count.
+   *
+   * @param username The username of the user
+   */
+  @gracefulHeroClose()
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
+  async getUser(username: string): Promise<User> {
+    console.log(`Getting user '${username}'.`);
+
+    const commandId = await this.hero.lastCommandId;
+
+    await this.goto(this.getHref(username));
+    if (await this.isPageNotFound()) {
+      throw new Error(`User '${username}' not found.`);
+    }
+
+    const resource = await this.hero.waitForResource(
+      {
+        url: `https://i.instagram.com/api/v1/users/web_profile_info/?username=${username}`,
+        type: "XHR",
+      },
+      { timeoutMs: 30e3, sinceCommandId: commandId },
+    );
+
+    const rawUser = await resource.json.then((json) => json?.data?.user);
+    if (!rawUser) throw new Error(`Failed to get user '${username}'.`);
+
+    const user: User = {
+      username: rawUser.username,
+      name: rawUser.full_name,
+      bio: rawUser.biography,
+      profilePic: rawUser.profile_pic_url_hd || rawUser.profile_pic_url,
+      website: rawUser.external_url,
+      isPrivate: rawUser.is_private,
+      isVerified: rawUser.is_verified,
+      followers: rawUser.edge_followed_by?.count,
+      following: rawUser.edge_follow?.count,
+      posts: rawUser.edge_owner_to_timeline_media?.count,
+    };
+
+    console.log(`Got user '${username}'.`);
+    return user;
   }
 
   //
