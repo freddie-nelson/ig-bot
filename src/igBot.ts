@@ -1058,6 +1058,113 @@ export default class IGBot {
   //
 
   /**
+   * Unfollows a user.
+   *
+   * @param username The username of the user to unfollow.
+   */
+  @gracefulHeroClose()
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
+  async unfollowUser(username: string) {
+    console.log(`Unfollowing user '${username}'.`);
+
+    await this.goto(this.getHref(username));
+    if (await this.isPageNotFound()) {
+      throw new Error(`User '${username}' not found.`);
+    }
+
+    this.isBusy = false;
+    if (!(await this.isFollowingUser(username))) {
+      console.log(`User '${username}' is not followed.`);
+      return;
+    }
+    this.isBusy = true;
+
+    // open unfollow modal
+    const followingButton = await this.waitForElement("svg[aria-label='Following']");
+    await this.hero.click(followingButton);
+
+    // wait for modal to open
+    this.waitForElement("div[role='dialog']");
+
+    // unfollow
+    const unfollowButton = await this.waitForElementWithText(
+      "div[role='dialog'] button",
+      "Unfollow",
+    );
+    await this.hero.click(unfollowButton);
+
+    // wait for response
+    await this.hero.waitForResource({
+      url: /i.instagram.com\/api\/v1\/web\/friendships\/(.*)\/unfollow\//,
+      type: "XHR",
+    });
+
+    console.log(`Unfollowed user '${username}'.`);
+  }
+
+  /**
+   * Follows a user.
+   *
+   * @param username The username of the user to follow.
+   */
+  @gracefulHeroClose()
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
+  async followUser(username: string) {
+    console.log(`Following user '${username}'.`);
+
+    await this.goto(this.getHref(username));
+    if (await this.isPageNotFound()) {
+      throw new Error(`User '${username}' not found.`);
+    }
+
+    this.isBusy = false;
+    if (await this.isFollowingUser(username)) {
+      console.log(`Already following user '${username}'.`);
+      return;
+    }
+    this.isBusy = true;
+
+    const followButton = await this.waitForElementWithText("header button", "Follow");
+    await this.hero.click(followButton);
+
+    // wait for response
+    await this.hero.waitForResource({
+      url: /i.instagram.com\/api\/v1\/web\/friendships\/(.*)\/follow\//,
+      type: "XHR",
+    });
+
+    console.log(`Followed user '${username}'.`);
+  }
+
+  /**
+   * Checks wether the currently logged in user is following a user.
+   *
+   * @param username the username of the user
+   */
+  @gracefulHeroClose()
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
+  async isFollowingUser(username: string): Promise<boolean> {
+    await this.goto(this.getHref(username), true);
+    if (await this.isPageNotFound()) {
+      throw new Error(`User '${username}' not found.`);
+    }
+
+    const followingButton = await this.waitForElement("svg[aria-label='Following']", 2e3).catch(
+      () => null,
+    );
+    return !!followingButton;
+  }
+
+  /**
    * Gets the details of a user.
    *
    * These details include the user's name, bio, followers, following, and posts count.
@@ -1467,7 +1574,6 @@ export default class IGBot {
     console.log("Password updated.");
   }
 
-  @gracefulHeroClose()
   @needsInit()
   @needsLogin()
   @makesBusy()
@@ -1719,7 +1825,6 @@ export default class IGBot {
     return await this.waitForElement("#pepUsername");
   }
 
-  @gracefulHeroClose()
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -1736,7 +1841,6 @@ export default class IGBot {
     await this.waitForNavigation();
   }
 
-  @gracefulHeroClose()
   @needsFree()
   @needsInit()
   @needsLogin()
@@ -1769,7 +1873,6 @@ export default class IGBot {
     console.log("Declined notifications.");
   }
 
-  @gracefulHeroClose()
   @needsInit()
   protected async acceptCookieConsent() {
     await this.hero.waitForPaintingStable();
@@ -1796,7 +1899,6 @@ export default class IGBot {
     console.log("Accepted cookies.");
   }
 
-  @gracefulHeroClose()
   @needsInit()
   protected async getMessageToast(timeToWaitMs = 1e3): Promise<ISuperHTMLElement | null> {
     const toastMessage = await this.waitForElement(
@@ -1807,13 +1909,11 @@ export default class IGBot {
     return toastMessage;
   }
 
-  @gracefulHeroClose()
   @needsInit()
   protected async isPageNotFound() {
     return (await this.document.title) === "Page Not Found • Instagram";
   }
 
-  @gracefulHeroClose()
   protected async repeatKey(key: ITypeInteraction, count: number) {
     for (let i = 0; i < count; i++) {
       await this.hero.type(key);
@@ -1826,7 +1926,6 @@ export default class IGBot {
    *
    * Make sure you have a focused element before calling this.
    */
-  @gracefulHeroClose()
   @needsInit()
   protected async clearInput() {
     // select all text in input
@@ -1837,7 +1936,6 @@ export default class IGBot {
     await this.hero.type(KeyboardKey.Backspace);
   }
 
-  @gracefulHeroClose()
   @needsInit()
   protected async waitForNoElementWithText(
     selector: string,
@@ -1856,7 +1954,6 @@ export default class IGBot {
     );
   }
 
-  @gracefulHeroClose()
   @needsInit()
   protected async waitForElementWithText(
     selector: string,
@@ -1875,7 +1972,6 @@ export default class IGBot {
     );
   }
 
-  @gracefulHeroClose()
   @needsInit()
   protected async findElementWithText(
     selector: string,
@@ -1903,7 +1999,6 @@ export default class IGBot {
     return null;
   }
 
-  @gracefulHeroClose()
   @needsInit()
   protected async waitForNoElement(selector: string, timeout?: number, checksIntervalMs?: number) {
     console.log(`Waiting for no element to exist with selector '${selector}'.`);
@@ -1915,7 +2010,6 @@ export default class IGBot {
     );
   }
 
-  @gracefulHeroClose()
   @needsInit()
   protected async waitForElement(selector: string, timeout?: number, checksIntervalMs?: number) {
     console.log(`Waiting for element with selector '${selector}' to exist.`);
@@ -1934,7 +2028,6 @@ export default class IGBot {
    * @param checksIntervalMs The time in ms between value checks
    * @returns The last value returned from waitForValue
    */
-  @gracefulHeroClose()
   @needsInit()
   protected async waitFor<T>(
     waitForValue: () => Promise<T>,
@@ -1965,7 +2058,6 @@ export default class IGBot {
     });
   }
 
-  @gracefulHeroClose()
   @needsInit()
   protected async querySelector(selector: string, silent = false) {
     if (!silent) console.log(`Selecting element '${selector}'.`);
@@ -1979,7 +2071,6 @@ export default class IGBot {
     return element;
   }
 
-  @gracefulHeroClose()
   @needsInit()
   protected async goto(href: string, skipIfAlreadyOnUrl = false, waitForStatus?: LoadStatus) {
     const url = useValidURL(href);
@@ -2014,7 +2105,6 @@ export default class IGBot {
    * @param trigger The waitForLocation trigger
    * @param status The waitForLoad status to wait for from the page
    */
-  @gracefulHeroClose()
   @needsInit()
   protected async waitForNavigationConditional(
     match: string,
@@ -2030,14 +2120,12 @@ export default class IGBot {
    * @param trigger The waitForLocation trigger
    * @param status The waitForLoad status to wait for from the page
    */
-  @gracefulHeroClose()
   @needsInit()
   protected async waitForNavigation(trigger: "change" | "reload" = "change", status?: LoadStatus) {
     await this.hero.waitForLocation(trigger);
     await this.waitForLoad(status);
   }
 
-  @gracefulHeroClose()
   @needsInit()
   protected async waitForLoad(status: LoadStatus = LoadStatus.AllContentLoaded) {
     await this.hero.waitForLoad(status);
