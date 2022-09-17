@@ -33,12 +33,13 @@ export interface PostOptions {
 export default class IGBot {
   protected baseInstagramUrl = new URL("https://www.instagram.com");
   protected graphqlUrl = this.getUrl("/graphql/query");
+  protected feedApiUrl = new URL("https://i.instagram.com/api/v1/feed/timeline/");
   protected loginUrl = this.getUrl("/accounts/login");
   protected logoutUrl = this.getUrl("/accounts/logout");
   protected onetapLoginUrl = this.getUrl("/accounts/onetap");
   protected editAccountUrl = this.getUrl("/accounts/edit");
   protected changePasswordUrl = this.getUrl("/accounts/password/change");
-  protected feedApiUrl = new URL("https://i.instagram.com/api/v1/feed/timeline/");
+  protected privacySecurityUrl = this.getUrl("/accounts/privacy_and_security/");
 
   protected core: Server;
   protected hero: Hero;
@@ -1212,6 +1213,67 @@ export default class IGBot {
 
     console.log(`Got user '${username}'.`);
     return user;
+  }
+
+  //
+  // Account Settings Methods
+  //
+
+  @gracefulHeroClose()
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
+  async setAccountPrivacy(isPrivate: boolean) {
+    console.log(`Setting account privacy to '${isPrivate}'.`);
+
+    await this.goto(this.privacySecurityUrl.href);
+
+    this.isBusy = false;
+    if (isPrivate === (await this.isAccountPrivate())) {
+      console.log(`Account privacy is already '${isPrivate}'.`);
+      return;
+    }
+    this.isBusy = true;
+
+    // toggle private account
+    const privateLabel = await this.waitForElement("#accountPrivacy label");
+    await this.hero.click(privateLabel);
+
+    // when setting from private to public, confirmation modal will appear
+    if (!isPrivate) {
+      // wait for modal to open
+      this.waitForElement("div[role='dialog']");
+
+      // confirm
+      const confirmButton = await this.waitForElementWithText("div[role='dialog'] button", "OK");
+      await this.hero.click(confirmButton);
+    }
+
+    // wait for response
+    await this.hero.waitForResource({
+      url: "https://www.instagram.com/accounts/set_private/",
+      type: "XHR",
+    });
+
+    console.log(`Set account privacy to '${isPrivate}'.`);
+  }
+
+  /**
+   * Gets wether the currently logged in user's account is private.
+   *
+   * @returns true if the account is private, false otherwise
+   */
+  @gracefulHeroClose()
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
+  async isAccountPrivate(): Promise<boolean> {
+    await this.goto(this.privacySecurityUrl.href, true);
+
+    const privateCheckbox = await this.waitForElement("#accountPrivacy input[type='checkbox']");
+    return !!(await privateCheckbox.checked);
   }
 
   //
