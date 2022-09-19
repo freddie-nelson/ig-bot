@@ -1059,6 +1059,77 @@ export default class IGBot {
   //
 
   /**
+   * Gets the usernames of people who follow the user with the given `username`.
+   *
+   * @param username The username of the user
+   * @param count The maximum number of followers to return, `Infinity` will get all followers
+   *
+   * @returns An array of usernames
+   */
+  @gracefulHeroClose()
+  @needsFree()
+  @needsInit()
+  @needsLogin()
+  @makesBusy()
+  async getFollowers(username: string, count: number) {
+    console.log(`Getting ${count} followers of '${username}'.`);
+
+    await this.openUserPage(username);
+
+    // open followers modal
+    const followersLink = await this.waitForElement(`a[href='/${username}/followers/']`, 5e3).catch(
+      () => null,
+    );
+    if (!followersLink)
+      throw new Error(
+        `Failed to get followers for '${username}', you may not have access to view this users followers.`,
+      );
+
+    await this.hero.click(followersLink);
+
+    // wait for followers list resource
+    let followers: string[] = [];
+
+    while (followers.length < count) {
+      const startCommandId = await this.hero.lastCommandId;
+
+      console.log("Waiting for followers list to load.");
+      const loadingSpinnerSelector = "[role='dialog'] [data-visualcompletion='loading-state']";
+      await this.waitForElement(loadingSpinnerSelector);
+      await this.waitForNoElement(loadingSpinnerSelector, 30e3);
+
+      console.log("Waiting for followers from api.");
+      const resource = await this.hero.waitForResource(
+        {
+          url: /i.instagram.com\/api\/v1\/friendships\/(.*)\/followers\/\?(.*)search_surface=follow_list_page(.*)/,
+          type: "XHR",
+        },
+        { sinceCommandId: startCommandId },
+      );
+
+      const json = await resource.json;
+      if (!json || !json.users || !Array.isArray(json.users))
+        throw new Error("Failed to get followers, invalid json response from instagram.");
+
+      followers.push(...json.users.map((user: any) => user.username));
+      console.log(`Got ${followers.length} followers...`);
+
+      if (json.users.length < 11) break;
+      else {
+        console.log("Scrolling to load more followers.");
+        const listEnderSelector = "[role='dialog'] > div > div > :nth-child(2) > :nth-child(2)";
+        const listEnder = await this.waitForElement(listEnderSelector, 3e3);
+        await listEnder.scrollIntoView();
+      }
+    }
+
+    followers = followers.slice(0, count);
+    console.log(`Got ${followers.length} followers of '${username}'.`);
+
+    return followers;
+  }
+
+  /**
    * Unfollows a user.
    *
    * @param username The username of the user to unfollow.
@@ -1071,10 +1142,7 @@ export default class IGBot {
   async unfollowUser(username: string) {
     console.log(`Unfollowing user '${username}'.`);
 
-    await this.goto(this.getHref(username));
-    if (await this.isPageNotFound()) {
-      throw new Error(`User '${username}' not found.`);
-    }
+    await this.openUserPage(username);
 
     this.isBusy = false;
     if (!(await this.isFollowingUser(username))) {
@@ -1119,10 +1187,7 @@ export default class IGBot {
   async followUser(username: string) {
     console.log(`Following user '${username}'.`);
 
-    await this.goto(this.getHref(username));
-    if (await this.isPageNotFound()) {
-      throw new Error(`User '${username}' not found.`);
-    }
+    await this.openUserPage(username);
 
     this.isBusy = false;
     if (await this.isFollowingUser(username)) {
@@ -1154,10 +1219,7 @@ export default class IGBot {
   @needsLogin()
   @makesBusy()
   async isFollowingUser(username: string): Promise<boolean> {
-    await this.goto(this.getHref(username), true);
-    if (await this.isPageNotFound()) {
-      throw new Error(`User '${username}' not found.`);
-    }
+    await this.openUserPage(username, true);
 
     const followingButton = await this.waitForElement("svg[aria-label='Following']", 2e3).catch(
       () => null,
@@ -1182,10 +1244,7 @@ export default class IGBot {
 
     const commandId = await this.hero.lastCommandId;
 
-    await this.goto(this.getHref(username));
-    if (await this.isPageNotFound()) {
-      throw new Error(`User '${username}' not found.`);
-    }
+    await this.openUserPage(username);
 
     const resource = await this.hero.waitForResource(
       {
@@ -1213,6 +1272,24 @@ export default class IGBot {
 
     console.log(`Got user '${username}'.`);
     return user;
+  }
+
+  /**
+   * Opens the profile page for a user.
+   *
+   * Throws an error if the user does not exist.
+   *
+   * @param username The username of the user to navigate to.
+   */
+  protected async openUserPage(
+    username: string,
+    skipIfAlreadyOnUrl?: boolean,
+    waitForStatus?: LoadStatus,
+  ) {
+    await this.goto(this.getHref(username), skipIfAlreadyOnUrl, waitForStatus);
+    if (await this.isPageNotFound()) {
+      throw new Error(`User '${username}' not found.`);
+    }
   }
 
   //
