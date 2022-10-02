@@ -1,5 +1,5 @@
 import { spawn } from "child_process";
-import { availableExamples, runExample, validateExample } from "./exampleRunner";
+import { availableExamples, validateExample } from "./exampleRunner";
 
 const availableTests = ["all", ...availableExamples];
 

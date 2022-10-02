@@ -2,14 +2,7 @@ import Hero, { ISuperHTMLElement, KeyboardKey, LoadStatus } from "@ulixee/hero";
 import { ITypeInteraction } from "@ulixee/hero/interfaces/IInteractions";
 import Server from "@ulixee/server";
 import { Post, PostIdentifer, PostInfo } from "./post";
-import {
-  createFlagDecorator,
-  gracefulHeroClose,
-  makesBusy,
-  needsFree,
-  needsInit,
-  needsLogin,
-} from "./classDecorators";
+import { gracefulHeroClose, makesBusy, needsFree, needsInit, needsLogin } from "./classDecorators";
 import { Profile, ProfileGender } from "./profile";
 import { useAbsolutePath } from "./utils/useAbsolutePath";
 import { useEscapeRegex } from "./utils/useEscapeRegex";

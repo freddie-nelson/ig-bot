@@ -2,18 +2,21 @@
   "compilerOptions": {
     "module": "CommonJS",
     "noImplicitAny": true,
-    "outDir": "dist",
+    "outDir": "../dist",
     "sourceMap": true,
     "rootDir": ".",
     "baseUrl": ".",
-    "target": "es6",
+    "target": "es2020",
     "moduleResolution": "node",
     "esModuleInterop": true,
     "experimentalDecorators": true,
     "paths": {
       "@/*": ["./*"]
     },
-    "composite": true
+    "composite": true,
+    "declaration": true,
+    "skipLibCheck": true
   },
-  "include": ["**/*.ts"]
+  "include": ["**/*"],
+  "exclude": ["node_modules"]
 }

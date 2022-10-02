@@ -1,21 +1,23 @@
 {
   "name": "ig-bot",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "A way to interact with Instagram Desktop from JS/TS without using the Instagram Graph API.",
+  "main": "dist/igBot.js",
+  "types": "dist/igBot.d.ts",
   "scripts": {
     "start": "node dist/index.js",
     "dev": "node -r tsconfig-paths/register -r ts-node/register src/index.ts",
     "clean": "rimraf coverage dist tmp",
     "prebuild": "npm run lint",
-    "build": "npm run clean && webpack",
-    "build:ts": "tsc -p tsconfig.json",
+    "build": "npm run clean && tsc -p src/tsconfig.json",
     "build:watch": "tsc -w -p tsconfig.json",
     "lint": "eslint . --ext .ts --ext .mts",
     "prettier": "prettier --config .prettierrc --write .",
     "test:watch": "jest --watch",
     "prepare": "husky install",
     "example": "ts-node --project examples/tsconfig.json -r tsconfig-paths/register runExample.ts",
-    "test": "node -r tsconfig-paths/register -r ts-node/register runTest.ts"
+    "test": "node -r tsconfig-paths/register -r ts-node/register runTest.ts",
+    "prepublish": "npm run build"
   },
   "dependencies": {
     "@ulixee/hero": "^2.0.0-alpha.9",
@@ -35,6 +37,7 @@
     "@types/is-valid-path": "^0.1.0",
     "@types/jest": "~27.5",
     "@types/node": "~16",
+    "@types/ws": "^8.5.3",
     "@typescript-eslint/eslint-plugin": "~5.26",
     "@typescript-eslint/parser": "~5.26",
     "eslint": "~8.16",

@@ -1,0 +1,39 @@
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Dependencies
+node_modules/
+
+# Coverage
+coverage
+
+# VS Code
+.vscode
+!.vscode/tasks.js
+
+# JetBrains IDEs
+.idea/
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Misc
+.DS_Store
+.env
+.eslintignore
+.eslintrc.json
+.editorconfig
+.prettierrc
+.nvmrc
+.husky
+.github
+
+test-post-*
+
+.VSCodeCounter

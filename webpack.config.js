@@ -2,7 +2,7 @@ const path = require("path");
 const TsconfigPathsPlugin = require("tsconfig-paths-webpack-plugin");
 
 module.exports = {
-  entry: "./src/index.ts",
+  entry: "./src/igBot.ts",
   target: "node",
   mode: "production",
   module: {
@@ -15,7 +15,6 @@ module.exports = {
     ],
   },
   resolve: {
-    extensions: [".tsx", ".ts", ".js"],
     plugins: [new TsconfigPathsPlugin({})],
   },
   output: {
