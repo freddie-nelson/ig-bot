@@ -1059,6 +1059,18 @@ export default class IGBot {
   //
 
   /**
+   * Gets the usernames of people who the given user is following.
+   *
+   * @param username The username of the user
+   * @param count The maximum number of users to return, `Infinity` will get all users the user is following
+   *
+   * @returns An array of usernames
+   */
+  getFollowing(username: string, count: number) {
+    return this.getFollowersOrFollowing(username, count, "following");
+  }
+
+  /**
    * Gets the usernames of people who follow the user with the given `username`.
    *
    * @param username The username of the user
@@ -1066,67 +1078,95 @@ export default class IGBot {
    *
    * @returns An array of usernames
    */
+  getFollowers(username: string, count: number) {
+    return this.getFollowersOrFollowing(username, count, "followers");
+  }
+
   @gracefulHeroClose()
   @needsFree()
   @needsInit()
   @needsLogin()
   @makesBusy()
-  async getFollowers(username: string, count: number) {
-    console.log(`Getting ${count} followers of '${username}'.`);
+  protected async getFollowersOrFollowing(
+    username: string,
+    count: number,
+    type: "followers" | "following",
+  ) {
+    // config for followers or following
+    const followersResource =
+      /i.instagram.com\/api\/v1\/friendships\/(.*)\/followers\/\?(.*)search_surface=follow_list_page(.*)/;
+    const followingResource = /i.instagram.com\/api\/v1\/friendships\/(.*)\/following\/\?(.*)/;
 
+    const listEnderSelectorFollowers =
+      "[role='dialog'] > div > div > :nth-child(2) > :nth-child(2)";
+    const listEnderSelectorFollowing =
+      "[role='dialog'] > div > div > :nth-child(3) > :nth-child(2)";
+
+    console.log(`Getting ${count} ${type} of '${username}'.`);
+
+    // navigate to user page
     await this.openUserPage(username);
 
-    // open followers modal
-    const followersLink = await this.waitForElement(`a[href='/${username}/followers/']`, 5e3).catch(
+    // open list modal
+    const modalLink = await this.waitForElement(`a[href='/${username}/${type}/']`, 5e3).catch(
       () => null,
     );
-    if (!followersLink)
+    if (!modalLink)
       throw new Error(
-        `Failed to get followers for '${username}', you may not have access to view this users followers.`,
+        `Failed to get ${type} for '${username}', you may not have access to view this users ${type}.`,
       );
 
-    await this.hero.click(followersLink);
+    await this.hero.click(modalLink);
 
-    // wait for followers list resource
-    let followers: string[] = [];
+    // scrape users
+    let users: string[] = [];
 
-    while (followers.length < count) {
+    while (users.length < count) {
       const startCommandId = await this.hero.lastCommandId;
 
-      console.log("Waiting for followers list to load.");
+      // wait for users to be displayed on page
+      console.log(`Waiting for ${type} list to load.`);
       const loadingSpinnerSelector = "[role='dialog'] [data-visualcompletion='loading-state']";
       await this.waitForElement(loadingSpinnerSelector);
       await this.waitForNoElement(loadingSpinnerSelector, 30e3);
 
-      console.log("Waiting for followers from api.");
+      // get api response
+      console.log(`Waiting for ${type} from api.`);
       const resource = await this.hero.waitForResource(
         {
-          url: /i.instagram.com\/api\/v1\/friendships\/(.*)\/followers\/\?(.*)search_surface=follow_list_page(.*)/,
+          url: type === "followers" ? followersResource : followingResource,
           type: "XHR",
         },
         { sinceCommandId: startCommandId },
       );
 
+      // extract usernames from api response
       const json = await resource.json;
       if (!json || !json.users || !Array.isArray(json.users))
         throw new Error("Failed to get followers, invalid json response from instagram.");
 
-      followers.push(...json.users.map((user: any) => user.username));
-      console.log(`Got ${followers.length} followers...`);
+      users.push(...json.users.map((user: any) => user.username));
+      console.log(`Got ${users.length} ${type}...`);
 
+      // expect at least 11 users per page
+      // so if less then we know we have reached the end of the list
+      // otherwise scroll to load more users
       if (json.users.length < 11) break;
       else {
         console.log("Scrolling to load more followers.");
-        const listEnderSelector = "[role='dialog'] > div > div > :nth-child(2) > :nth-child(2)";
+        const listEnderSelector =
+          type === "followers" ? listEnderSelectorFollowers : listEnderSelectorFollowing;
         const listEnder = await this.waitForElement(listEnderSelector, 3e3);
         await listEnder.scrollIntoView();
       }
     }
 
-    followers = followers.slice(0, count);
-    console.log(`Got ${followers.length} followers of '${username}'.`);
+    // limit to count
+    users = users.slice(0, count);
 
-    return followers;
+    console.log(`Got ${users.length} ${type} of '${username}'.`);
+
+    return users;
   }
 
   /**
